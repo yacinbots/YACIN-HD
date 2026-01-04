@@ -1,15 +1,1022 @@
-<!-- index.html -->
 <!DOCTYPE html>
-<html lang="ar">
+<html lang="ar" dir="rtl">
 <head>
 <meta charset="UTF-8">
-<title>بث مباشر قناة النهار TV</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>نتائج كأس إفريقيا - AFCON مباشر</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
-    html, body { margin:0; height:100%; }
-    iframe { width:100%; height:100%; border:none; }
+  :root {
+    --primary: #2c3e50;
+    --secondary: #1abc9c;
+    --accent: #e74c3c;
+    --light: #f8f9fa;
+    --dark: #121212;
+    --gray: #95a5a6;
+    --transition: all 0.3s ease;
+    --shadow: 0 10px 20px rgba(0,0,0,0.1);
+    --radius: 12px;
+  }
+
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  body {
+    font-family: 'Cairo', sans-serif;
+    background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+    color: #333;
+    line-height: 1.6;
+    transition: var(--transition);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  body.dark {
+    background: linear-gradient(135deg, #0f0f23 0%, #1a1a2e 100%);
+    color: #f0f0f0;
+  }
+
+  /* شعار الموقع */
+  .logo-container {
+    background: linear-gradient(to right, var(--primary), var(--secondary));
+    text-align: center;
+    padding: 25px 20px;
+    border-bottom-left-radius: 30px;
+    border-bottom-right-radius: 30px;
+    box-shadow: var(--shadow);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .logo-container::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" preserveAspectRatio="none"><path d="M0,0 L100,0 L100,100 Z" fill="rgba(255,255,255,0.1)"/></svg>');
+    background-size: cover;
+  }
+
+  .logo-container img {
+    height: 85px;
+    filter: drop-shadow(0 5px 10px rgba(0,0,0,0.2));
+    transition: transform 0.5s ease;
+  }
+
+  .logo-container img:hover {
+    transform: scale(1.05);
+  }
+
+  /* أزرار رئيسية */
+  .main-buttons {
+    text-align: center;
+    margin: 30px 0;
+    padding: 0 20px;
+  }
+
+  .main-buttons button {
+    margin: 0 15px;
+    padding: 14px 30px;
+    font-weight: 700;
+    border-radius: var(--radius);
+    border: none;
+    cursor: pointer;
+    background: var(--primary);
+    color: #fff;
+    transition: var(--transition);
+    font-size: 1.1rem;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .main-buttons button::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+    transition: 0.5s;
+  }
+
+  .main-buttons button:hover::before {
+    left: 100%;
+  }
+
+  .main-buttons button:hover {
+    background: var(--secondary);
+    transform: translateY(-3px);
+    box-shadow: 0 8px 15px rgba(0,0,0,0.2);
+  }
+
+  .main-buttons button.active {
+    background: var(--accent);
+    box-shadow: 0 0 15px rgba(231, 76, 60, 0.5);
+  }
+
+  /* حاوية المباريات والقنوات */
+  .content-container {
+    padding: 0 20px 50px;
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+
+  .matches-container, .channels-container {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 25px;
+    animation: fadeIn 0.5s ease;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* بطاقات المباريات */
+  .match-card {
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    width: 350px;
+    overflow: hidden;
+    transition: var(--transition);
+    cursor: pointer;
+    position: relative;
+    border: 1px solid rgba(0,0,0,0.05);
+  }
+
+  .match-card::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 5px;
+    background: linear-gradient(to right, var(--secondary), var(--accent));
+  }
+
+  .match-card:hover {
+    transform: translateY(-10px);
+    box-shadow: 0 15px 30px rgba(0,0,0,0.15);
+  }
+
+  body.dark .match-card {
+    background: rgba(30, 30, 40, 0.95);
+    border: 1px solid rgba(255,255,255,0.05);
+  }
+
+  .match-card img {
+    width: 100%;
+    height: 200px;
+    object-fit: cover;
+  }
+
+  .match-info {
+    padding: 20px;
+  }
+
+  .match-info h3 {
+    font-size: 1.3rem;
+    margin-bottom: 20px;
+    color: var(--primary);
+    text-align: center;
+  }
+
+  body.dark .match-info h3 {
+    color: var(--secondary);
+  }
+
+  .teams {
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    margin: 15px 0;
+  }
+
+  .team {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 40%;
+  }
+
+  .team img {
+    width: 80px;
+    height: 80px;
+    margin-bottom: 10px;
+    object-fit: contain;
+  }
+
+  .team span {
+    font-weight: 600;
+    text-align: center;
+    font-size: 1rem;
+    margin-top: 5px;
+  }
+
+  .score {
+    font-size: 1.8rem;
+    font-weight: 800;
+    margin-top: 10px;
+    color: var(--accent);
+    background: rgba(231, 76, 60, 0.1);
+    padding: 5px 15px;
+    border-radius: 50px;
+  }
+
+  .vs {
+    font-weight: 900;
+    font-size: 1.3rem;
+    color: var(--primary);
+  }
+
+  body.dark .vs {
+    color: var(--secondary);
+  }
+
+  .match-date {
+    margin-top: 15px;
+    color: var(--gray);
+    font-size: 0.9rem;
+    text-align: center;
+    padding: 10px;
+    background: rgba(149, 165, 166, 0.1);
+    border-radius: 8px;
+  }
+
+  .watch-btn {
+    display: block;
+    width: 100%;
+    margin-top: 15px;
+    padding: 12px;
+    background: linear-gradient(to right, var(--secondary), var(--accent));
+    color: #fff;
+    border: none;
+    border-radius: var(--radius);
+    cursor: pointer;
+    font-weight: 700;
+    font-size: 1.1rem;
+    transition: var(--transition);
+  }
+
+  .watch-btn:hover {
+    opacity: 0.9;
+    box-shadow: 0 5px 15px rgba(231, 76, 60, 0.3);
+  }
+
+  /* بطاقات القنوات */
+  .channels-container {
+    display: none;
+  }
+
+  .channel-card {
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    width: 300px;
+    overflow: hidden;
+    transition: var(--transition);
+    text-align: center;
+    border: 1px solid rgba(0,0,0,0.05);
+    position: relative;
+  }
+
+  body.dark .channel-card {
+    background: rgba(30, 30, 40, 0.95);
+    border: 1px solid rgba(255,255,255,0.05);
+  }
+
+  .channel-card:hover {
+    transform: translateY(-10px);
+    box-shadow: 0 15px 30px rgba(0,0,0,0.15);
+  }
+
+  .channel-card img {
+    width: 100%;
+    height: 180px;
+    object-fit: cover;
+  }
+
+  .channel-card h4 {
+    padding: 20px;
+    font-size: 1.3rem;
+    color: var(--primary);
+  }
+
+  body.dark .channel-card h4 {
+    color: var(--secondary);
+  }
+
+  /* نافذة الفيديو */
+  .modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.9);
+    justify-content: center;
+    align-items: center;
+    animation: fadeInModal 0.3s ease;
+  }
+
+  @keyframes fadeInModal {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  .modal-content {
+    position: relative;
+    width: 90%;
+    max-width: 1000px;
+    border-radius: 15px;
+    overflow: hidden;
+    box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+  }
+
+  .modal video {
+    width: 100%;
+    height: auto;
+    display: block;
+    background: #000;
+  }
+
+  .close-modal {
+    position: absolute;
+    top: -15px;
+    left: -15px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    font-size: 20px;
+    cursor: pointer;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: var(--transition);
+  }
+
+  .close-modal:hover {
+    transform: scale(1.1);
+    background: #c0392b;
+  }
+
+  /* أزرار التحكم */
+  #toggleTheme {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    padding: 12px;
+    border-radius: 50%;
+    border: none;
+    background: var(--secondary);
+    color: #fff;
+    cursor: pointer;
+    z-index: 100;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+    transition: var(--transition);
+    font-size: 1.2rem;
+  }
+
+  #toggleTheme:hover {
+    transform: rotate(30deg);
+    background: var(--primary);
+  }
+
+  #menuBtn {
+    position: fixed;
+    top: 20px;
+    left: 20px;
+    padding: 12px;
+    border-radius: 50%;
+    border: none;
+    background: var(--primary);
+    color: #fff;
+    cursor: pointer;
+    z-index: 100;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+    transition: var(--transition);
+    font-size: 1.2rem;
+  }
+
+  #menuBtn:hover {
+    background: var(--accent);
+    transform: scale(1.1);
+  }
+
+  /* لوحة القائمة */
+  .menu-panel {
+    display: none;
+    position: fixed;
+    top: 70px;
+    left: 20px;
+    background: rgba(255, 255, 255, 0.95);
+    padding: 20px;
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    z-index: 100;
+    min-width: 250px;
+    backdrop-filter: blur(10px);
+    animation: slideIn 0.3s ease;
+  }
+
+  body.dark .menu-panel {
+    background: rgba(30, 30, 40, 0.95);
+  }
+
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .menu-panel a {
+    display: block;
+    margin: 12px 0;
+    color: var(--primary);
+    text-decoration: none;
+    font-weight: 600;
+    padding: 10px 15px;
+    border-radius: 8px;
+    transition: var(--transition);
+  }
+
+  body.dark .menu-panel a {
+    color: var(--secondary);
+  }
+
+  .menu-panel a:hover {
+    background: rgba(26, 188, 156, 0.1);
+    padding-right: 20px;
+    color: var(--accent);
+  }
+
+  .menu-panel a i {
+    margin-left: 10px;
+  }
+
+  /* نافذة الترحيب */
+  #welcomeModal {
+    display: none;
+    position: fixed;
+    z-index: 2000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.85);
+    justify-content: center;
+    align-items: center;
+  }
+
+  #welcomeModal .welcome-content {
+    background: linear-gradient(to bottom right, #fff, #f8f9fa);
+    padding: 30px;
+    border-radius: var(--radius);
+    text-align: center;
+    max-width: 450px;
+    width: 90%;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.3);
+    animation: popUp 0.5s ease;
+    border-top: 5px solid var(--accent);
+  }
+
+  body.dark #welcomeModal .welcome-content {
+    background: linear-gradient(to bottom right, #1a1a2e, #16213e);
+    color: #f0f0f0;
+  }
+
+  @keyframes popUp {
+    0% { transform: scale(0.8); opacity: 0; }
+    100% { transform: scale(1); opacity: 1; }
+  }
+
+  #welcomeModal h3 {
+    color: var(--primary);
+    margin-bottom: 15px;
+    font-size: 1.5rem;
+  }
+
+  #welcomeModal p {
+    margin-bottom: 25px;
+    font-size: 1.1rem;
+  }
+
+  #welcomeModal button {
+    margin: 10px;
+    padding: 12px 25px;
+    border-radius: var(--radius);
+    border: none;
+    cursor: pointer;
+    font-weight: 700;
+    font-size: 1rem;
+    transition: var(--transition);
+  }
+
+  #welcomeModal .join {
+    background: linear-gradient(to right, var(--secondary), var(--accent));
+    color: #fff;
+  }
+
+  #welcomeModal .join:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 15px rgba(231, 76, 60, 0.3);
+  }
+
+  #welcomeModal .cancel {
+    background: transparent;
+    color: var(--gray);
+    border: 2px solid var(--gray);
+  }
+
+  #welcomeModal .cancel:hover {
+    background: var(--gray);
+    color: white;
+  }
+
+  /* تذييل الصفحة */
+  .footer {
+    text-align: center;
+    padding: 25px;
+    background: rgba(44, 62, 80, 0.9);
+    color: white;
+    margin-top: 50px;
+    border-top-left-radius: 30px;
+    border-top-right-radius: 30px;
+  }
+
+  body.dark .footer {
+    background: rgba(18, 18, 18, 0.9);
+  }
+
+  .footer p {
+    margin-bottom: 10px;
+  }
+
+  .footer a {
+    color: var(--secondary);
+    text-decoration: none;
+    font-weight: 600;
+  }
+
+  /* تحسينات للجوال */
+  @media (max-width: 768px) {
+    .match-card, .channel-card {
+      width: 100%;
+      max-width: 400px;
+    }
+    
+    .main-buttons button {
+      margin: 5px;
+      padding: 12px 20px;
+      font-size: 1rem;
+    }
+    
+    .logo-container img {
+      height: 65px;
+    }
+    
+    #toggleTheme, #menuBtn {
+      padding: 10px;
+      top: 15px;
+    }
+    
+    .modal-content {
+      width: 95%;
+    }
+  }
+
+  /* تأثيرات إضافية */
+  .live-indicator {
+    position: absolute;
+    top: 15px;
+    left: 15px;
+    background: var(--accent);
+    color: white;
+    padding: 5px 15px;
+    border-radius: 50px;
+    font-size: 0.9rem;
+    font-weight: 700;
+    z-index: 2;
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(231, 76, 60, 0.7); }
+    70% { box-shadow: 0 0 0 10px rgba(231, 76, 60, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(231, 76, 60, 0); }
+  }
+
+  .loader {
+    display: none;
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 9999;
+  }
+
+  .loader::after {
+    content: "";
+    display: block;
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    border: 5px solid #f3f3f3;
+    border-top: 5px solid var(--secondary);
+    animation: spin 1s linear infinite;
+  }
+
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
 </style>
 </head>
 <body>
-<iframe src="https://www.elahmad.com/tv/ennaharonline.php" allowfullscreen></iframe>
+
+<!-- أزرار التحكم -->
+<button id="menuBtn">☰</button>
+<button id="toggleTheme">🌓</button>
+
+<!-- لوحة القائمة -->
+<div class="menu-panel" id="menuPanel">
+  <a href="https://t.me/Yacin_HD" target="_blank"><i>📢</i> قناة تلجرام</a>
+  <a href="https://t.me/J_WW22" target="_blank"><i>👨‍💻</i> حساب المطور</a>
+  <a href="https://www.facebook.com/profile.php?id=100052854003446" target="_blank"><i>📘</i> صفحة الفيسبوك</a>
+</div>
+
+<!-- شعار الموقع -->
+<div class="logo-container">
+  <img src="https://f.top4top.io/p_3656l7nyx0.png" alt="شعار موقع كأس إفريقيا">
+</div>
+
+<!-- أزرار رئيسية -->
+<div class="main-buttons">
+  <button id="showMatchesBtn" class="active">المباريات</button>
+  <button id="showChannelsBtn">القنوات</button>
+</div>
+
+<!-- محتوى الصفحة -->
+<div class="content-container">
+  <!-- واجهة المباريات -->
+  <div class="matches-container" id="matches"></div>
+  
+  <!-- واجهة القنوات -->
+  <div class="channels-container" id="channels"></div>
+</div>
+
+<!-- نافذة الفيديو -->
+<div class="modal" id="videoModal">
+  <div class="modal-content">
+    <button class="close-modal" id="closeModal">&times;</button>
+    <video id="matchVideo" controls autoplay></video>
+  </div>
+</div>
+
+<!-- نافذة الترحيب -->
+<div class="modal" id="welcomeModal">
+  <div class="welcome-content">
+    <h3>مرحباً بك في موقع كأس إفريقيا</h3>
+    <p>لمشاهدة المباريات مباشرة والحصول على آخر التحديثات، انضم إلى قناتنا على تلجرام</p>
+    <button class="join" onclick="joinTelegram()">انضمام للقناة</button>
+    <button class="cancel" onclick="closeWelcome()">المتابعة كزائر</button>
+  </div>
+</div>
+
+<!-- تذييل الصفحة -->
+<div class="footer">
+  <p>موقع نتائج كأس إفريقيا - AFCON مباشر</p>
+  <p>تابعنا على: <a href="https://t.me/Yacin_HD" target="_blank">تلجرام</a> | <a href="https://t.me/J_WW22" target="_blank">المطور</a></p>
+  <p>© 2025 جميع الحقوق محفوظة</p>
+</div>
+
+<!-- مؤشر التحميل -->
+<div class="loader" id="loader"></div>
+
+<script>
+// دالة لتحميل المباريات
+async function fetchMatches() {
+  try {
+    showLoader();
+    const res = await fetch('https://api.sportsrc.org/?data=matches&category=football');
+    const json = await res.json();
+    
+    if(json.success) {
+      const matchesContainer = document.getElementById('matches');
+      matchesContainer.innerHTML = '';
+      
+      // فلترة المباريات الإفريقية
+      const cafMatches = json.data.filter(match => {
+        const title = match.title.toLowerCase();
+        return title.includes('africa') || title.includes('afcon') || 
+               title.includes('morocco') || title.includes('tanzania') ||
+               title.includes('egypt') || title.includes('senegal') ||
+               title.includes('algeria') || title.includes('tunisia');
+      });
+      
+      // إذا لم نجد مباريات إفريقية، نعرض بعض المباريات الافتراضية
+      const matchesToShow = cafMatches.length > 0 ? cafMatches : getDefaultMatches();
+      
+      matchesToShow.forEach((match, index) => {
+        const date = new Date(match.date).toLocaleString('ar-DZ', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false
+        });
+        
+        const homeScore = match.score?.home ?? "-";
+        const awayScore = match.score?.away ?? "-";
+        const isLive = index === 0;
+        
+        const card = document.createElement('div');
+        card.className = 'match-card';
+        
+        card.innerHTML = `
+          ${isLive ? '<div class="live-indicator">🔴 مباشر</div>' : ''}
+          <div class="poster">
+            <img src="${match.poster || 'https://images.unsplash.com/photo-1556056504-5c7696c4c28d?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80'}" alt="${match.title}">
+          </div>
+          <div class="match-info">
+            <h3>${match.title}</h3>
+            <div class="teams">
+              <div class="team">
+                <img src="${match.teams.home.badge || 'https://via.placeholder.com/80x80/2c3e50/ffffff?text=Team'}" alt="${match.teams.home.name}">
+                <span>${match.teams.home.name}</span>
+                <div class="score">${homeScore}</div>
+              </div>
+              <div class="vs">VS</div>
+              <div class="team">
+                <img src="${match.teams.away.badge || 'https://via.placeholder.com/80x80/2c3e50/ffffff?text=Team'}" alt="${match.teams.away.name}">
+                <span>${match.teams.away.name}</span>
+                <div class="score">${awayScore}</div>
+              </div>
+            </div>
+            <div class="match-date">${date}</div>
+            ${isLive ? '<button class="watch-btn">شاهد البث المباشر</button>' : '<button class="watch-btn" style="background: #95a5a6;">شاهد التوقيتات</button>'}
+          </div>
+        `;
+        
+        // إضافة حدث لمشاهدة البث
+        const watchBtn = card.querySelector('.watch-btn');
+        if (isLive) {
+          const videoUrl = "https://prod-fastly-us-west-2.video.pscp.tv/Transcoding/v1/hls/jpg_FLY3NdH72LrTKw_OmImQ5YCOi8g-HDs5ydMQTtKUYxBOCt3WUl0_bCwrM-DbUU03oQo1564d-250hW2EMQ/transcode/us-west-2/periscope-replay-direct-prod-us-west-2-public/eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCIsInZlcnNpb24iOiIyIn0.eyJFbmNvZGVyU2V0dGluZyI6ImVuY29kZXJfc2V0dGluZ18xMDgwcDMwXzEwIiwiSGVpZ2h0IjoxMDgwLCJLYnBzIjo1NTAwLCJXaWR0aCI6MTkyMH0.OImMZabKYJ0cs9CnIapU-4aBk6KNBiJxi1hh-6l4BZ4/dynamic_highlatency.m3u8?type=live";
+          watchBtn.addEventListener('click', () => openVideo(videoUrl));
+        } else {
+          watchBtn.addEventListener('click', () => {
+            alert('سيتم بث المباراة في التاريخ المحدد');
+          });
+        }
+        
+        matchesContainer.appendChild(card);
+      });
+    } else {
+      // إذا فشل جلب البيانات، نعرض مباريات افتراضية
+      loadDefaultMatches();
+    }
+  } catch(err) {
+    console.error('خطأ في جلب البيانات:', err);
+    loadDefaultMatches();
+  } finally {
+    hideLoader();
+  }
+}
+
+// مباريات افتراضية للعرض
+function getDefaultMatches() {
+  return [
+    {
+      title: "مصر vs السنغال - كأس إفريقيا",
+      poster: "https://images.unsplash.com/photo-1556056504-5c7696c4c28d?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80",
+      date: new Date(Date.now() + 86400000).toISOString(),
+      score: { home: "-", away: "-" },
+      teams: {
+        home: { name: "مصر", badge: "https://upload.wikimedia.org/wikipedia/commons/thumb/f/fe/Flag_of_Egypt.svg/800px-Flag_of_Egypt.svg.png" },
+        away: { name: "السنغال", badge: "https://upload.wikimedia.org/wikipedia/commons/thumb/f/fd/Flag_of_Senegal.svg/800px-Flag_of_Senegal.svg.png" }
+      }
+    },
+    {
+      title: "المغرب vs الجزائر - كأس إفريقيا",
+      poster: "https://images.unsplash.com/photo-1574623452334-1e0ac2b3ccb4?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80",
+      date: new Date(Date.now() + 172800000).toISOString(),
+      score: { home: "-", away: "-" },
+      teams: {
+        home: { name: "المغرب", badge: "https://upload.wikimedia.org/wikipedia/commons/thumb/2/2c/Flag_of_Morocco.svg/800px-Flag_of_Morocco.svg.png" },
+        away: { name: "الجزائر", badge: "https://upload.wikimedia.org/wikipedia/commons/thumb/7/77/Flag_of_Algeria.svg/800px-Flag_of_Algeria.svg.png" }
+      }
+    }
+  ];
+}
+
+function loadDefaultMatches() {
+  const matchesContainer = document.getElementById('matches');
+  matchesContainer.innerHTML = '';
+  
+  const defaultMatches = getDefaultMatches();
+  
+  defaultMatches.forEach((match, index) => {
+    const date = new Date(match.date).toLocaleString('ar-DZ', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    });
+    
+    const card = document.createElement('div');
+    card.className = 'match-card';
+    
+    card.innerHTML = `
+      <div class="poster">
+        <img src="${match.poster}" alt="${match.title}">
+      </div>
+      <div class="match-info">
+        <h3>${match.title}</h3>
+        <div class="teams">
+          <div class="team">
+            <img src="${match.teams.home.badge}" alt="${match.teams.home.name}">
+            <span>${match.teams.home.name}</span>
+            <div class="score">${match.score.home}</div>
+          </div>
+          <div class="vs">VS</div>
+          <div class="team">
+            <img src="${match.teams.away.badge}" alt="${match.teams.away.name}">
+            <span>${match.teams.away.name}</span>
+            <div class="score">${match.score.away}</div>
+          </div>
+        </div>
+        <div class="match-date">${date}</div>
+        <button class="watch-btn" style="background: #95a5a6;">شاهد التوقيتات</button>
+      </div>
+    `;
+    
+    matchesContainer.appendChild(card);
+  });
+}
+
+// دالة لتحميل القنوات
+function loadChannels() {
+  const channelsContainer = document.getElementById('channels');
+  channelsContainer.innerHTML = '';
+  
+  const channels = [
+    {
+      name: "beIN SPORTS AFCON 1 4K",
+      logo: "https://f.top4top.io/p_3656y12i71.jpg",
+      description: "القناة الرسمية لبث مباريات كأس إفريقيا بدقة 4K"
+    }
+  ];
+  
+  channels.forEach(ch => {
+    const card = document.createElement('div');
+    card.className = 'channel-card';
+    
+    card.innerHTML = `
+      <img src="${ch.logo}" alt="${ch.name}">
+      <h4>${ch.name}</h4>
+      <p style="padding: 0 20px 20px; color: var(--gray);">${ch.description}</p>
+    `;
+    
+    channelsContainer.appendChild(card);
+  });
+}
+
+// دالة لفتح نافذة الفيديو
+function openVideo(url) {
+  const modal = document.getElementById('videoModal');
+  const video = document.getElementById('matchVideo');
+  video.src = url;
+  modal.style.display = 'flex';
+}
+
+// دالة لإغلاق نافذة الفيديو
+function closeVideo() {
+  const modal = document.getElementById('videoModal');
+  const video = document.getElementById('matchVideo');
+  video.pause();
+  video.src = "";
+  modal.style.display = 'none';
+}
+
+// دالة للانضمام إلى قناة تلجرام
+function joinTelegram() {
+  window.open('https://t.me/Yacin_HD', '_blank');
+  closeWelcome();
+}
+
+// دالة لإغلاق نافذة الترحيب
+function closeWelcome() {
+  document.getElementById('welcomeModal').style.display = 'none';
+}
+
+// دالة لإظهار مؤشر التحميل
+function showLoader() {
+  document.getElementById('loader').style.display = 'block';
+}
+
+// دالة لإخفاء مؤشر التحميل
+function hideLoader() {
+  document.getElementById('loader').style.display = 'none';
+}
+
+// عند تحميل الصفحة
+document.addEventListener('DOMContentLoaded', function() {
+  // عرض نافذة الترحيب للمرة الأولى فقط
+  if(!localStorage.getItem('visited')) {
+    setTimeout(() => {
+      document.getElementById('welcomeModal').style.display = 'flex';
+      localStorage.setItem('visited', 'true');
+    }, 1000);
+  }
+  
+  // تحميل المباريات والقنوات
+  fetchMatches();
+  loadChannels();
+  
+  // أحداث القائمة
+  const menuBtn = document.getElementById('menuBtn');
+  const menuPanel = document.getElementById('menuPanel');
+  
+  menuBtn.addEventListener('click', () => {
+    menuPanel.style.display = menuPanel.style.display === 'block' ? 'none' : 'block';
+  });
+  
+  // إغلاق القائمة عند النقر خارجها
+  document.addEventListener('click', (e) => {
+    if (!menuBtn.contains(e.target) && !menuPanel.contains(e.target)) {
+      menuPanel.style.display = 'none';
+    }
+  });
+  
+  // حدث زر الوضع الليلي
+  const toggleThemeBtn = document.getElementById('toggleTheme');
+  
+  // التحقق من التفضيل المحفوظ
+  if (localStorage.getItem('theme') === 'dark') {
+    document.body.classList.add('dark');
+    toggleThemeBtn.textContent = '☀️';
+  }
+  
+  toggleThemeBtn.addEventListener('click', () => {
+    document.body.classList.toggle('dark');
+    
+    if (document.body.classList.contains('dark')) {
+      localStorage.setItem('theme', 'dark');
+      toggleThemeBtn.textContent = '☀️';
+    } else {
+      localStorage.setItem('theme', 'light');
+      toggleThemeBtn.textContent = '🌓';
+    }
+  });
+  
+  // أحداث الأزرار الرئيسية
+  const showMatchesBtn = document.getElementById('showMatchesBtn');
+  const showChannelsBtn = document.getElementById('showChannelsBtn');
+  
+  showMatchesBtn.addEventListener('click', () => {
+    document.getElementById('matches').style.display = 'flex';
+    document.getElementById('channels').style.display = 'none';
+    showMatchesBtn.classList.add('active');
+    showChannelsBtn.classList.remove('active');
+  });
+  
+  showChannelsBtn.addEventListener('click', () => {
+    document.getElementById('matches').style.display = 'none';
+    document.getElementById('channels').style.display = 'flex';
+    showChannelsBtn.classList.add('active');
+    showMatchesBtn.classList.remove('active');
+  });
+  
+  // حدث إغلاق نافذة الفيديو
+  document.getElementById('closeModal').addEventListener('click', closeVideo);
+  
+  // إغلاق نافذة الفيديو عند النقر خارجها
+  document.getElementById('videoModal').addEventListener('click', (e) => {
+    if (e.target.id === 'videoModal') {
+      closeVideo();
+    }
+  });
+});
+</script>
 </body>
 </html>
