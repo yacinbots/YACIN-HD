@@ -3,643 +3,535 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>نتائج كأس إفريقيا - AFCON مباشر</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<title>بث مباشر - كأس إفريقيا للأمم 2025</title>
 <style>
   :root {
-    --primary: #2c3e50;
-    --secondary: #1abc9c;
-    --accent: #e74c3c;
-    --light: #f8f9fa;
-    --dark: #121212;
-    --gray: #95a5a6;
+    --primary-color: #e74c3c;
+    --primary-dark: #c0392b;
+    --secondary-color: #3498db;
+    --light-bg: #f8f9fa;
+    --dark-bg: #121212;
+    --card-bg: #ffffff;
+    --dark-card: #1e1e1e;
+    --text-light: #333333;
+    --text-dark: #eeeeee;
+    --shadow: 0 8px 25px rgba(0,0,0,0.1);
+    --shadow-dark: 0 8px 25px rgba(0,0,0,0.3);
     --transition: all 0.3s ease;
-    --shadow: 0 10px 20px rgba(0,0,0,0.1);
-    --radius: 12px;
   }
 
   * {
-    box-sizing: border-box;
     margin: 0;
     padding: 0;
+    box-sizing: border-box;
   }
 
   body {
-    font-family: 'Cairo', sans-serif;
-    background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-    color: #333;
-    line-height: 1.6;
+    font-family: 'Segoe UI', 'Cairo', Tahoma, Geneva, Verdana, sans-serif;
+    background: var(--light-bg);
+    color: var(--text-light);
     transition: var(--transition);
     min-height: 100vh;
-    overflow-x: hidden;
   }
 
   body.dark {
-    background: linear-gradient(135deg, #0f0f23 0%, #1a1a2e 100%);
-    color: #f0f0f0;
+    background: var(--dark-bg);
+    color: var(--text-dark);
+  }
+
+  /* الأزرار العائمة */
+  .floating-buttons {
+    position: fixed;
+    top: 20px;
+    left: 20px;
+    z-index: 1000;
+    display: flex;
+    gap: 10px;
+  }
+
+  .floating-buttons button {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    border: none;
+    background: var(--secondary-color);
+    color: white;
+    font-size: 20px;
+    cursor: pointer;
+    transition: var(--transition);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: var(--shadow);
+  }
+
+  .floating-buttons button:hover {
+    transform: scale(1.1);
+    background: var(--primary-color);
+  }
+
+  #toggleTheme {
+    background: var(--primary-color);
   }
 
   /* شعار الموقع */
   .logo-container {
-    background: linear-gradient(to right, var(--primary), var(--secondary));
+    background: linear-gradient(135deg, #2c3e50, #4a6491);
+    padding: 20px 0;
     text-align: center;
-    padding: 25px 20px;
-    border-bottom-left-radius: 30px;
-    border-bottom-right-radius: 30px;
-    box-shadow: var(--shadow);
-    position: relative;
-    overflow: hidden;
-  }
-
-  .logo-container::before {
-    content: "";
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" preserveAspectRatio="none"><path d="M0,0 L100,0 L100,100 Z" fill="rgba(255,255,255,0.1)"/></svg>');
-    background-size: cover;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
   }
 
   .logo-container img {
-    height: 85px;
-    filter: drop-shadow(0 5px 10px rgba(0,0,0,0.2));
-    transition: transform 0.5s ease;
+    height: 100px;
+    transition: var(--transition);
   }
 
-  .logo-container img:hover {
-    transform: scale(1.05);
+  .dark .logo-container {
+    background: linear-gradient(135deg, #1a1a2e, #16213e);
   }
 
-  /* أزرار رئيسية */
+  /* أزرار التنقل */
   .main-buttons {
     text-align: center;
-    margin: 30px 0;
-    padding: 0 20px;
+    padding: 30px 20px;
+    background: rgba(255,255,255,0.95);
+    margin: 0 auto;
+    max-width: 1200px;
+    border-radius: 0 0 20px 20px;
+    box-shadow: var(--shadow);
+  }
+
+  .dark .main-buttons {
+    background: rgba(30,30,30,0.95);
   }
 
   .main-buttons button {
     margin: 0 15px;
-    padding: 14px 30px;
-    font-weight: 700;
-    border-radius: var(--radius);
+    padding: 15px 40px;
+    font-size: 18px;
+    font-weight: bold;
+    border-radius: 50px;
     border: none;
     cursor: pointer;
-    background: var(--primary);
-    color: #fff;
+    background: linear-gradient(to right, var(--secondary-color), #2980b9);
+    color: white;
     transition: var(--transition);
-    font-size: 1.1rem;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-    position: relative;
-    overflow: hidden;
-  }
-
-  .main-buttons button::before {
-    content: "";
-    position: absolute;
-    top: 0;
-    left: -100%;
-    width: 100%;
-    height: 100%;
-    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
-    transition: 0.5s;
-  }
-
-  .main-buttons button:hover::before {
-    left: 100%;
+    min-width: 180px;
+    box-shadow: 0 4px 15px rgba(52, 152, 219, 0.3);
   }
 
   .main-buttons button:hover {
-    background: var(--secondary);
     transform: translateY(-3px);
-    box-shadow: 0 8px 15px rgba(0,0,0,0.2);
+    box-shadow: 0 6px 20px rgba(52, 152, 219, 0.4);
   }
 
   .main-buttons button.active {
-    background: var(--accent);
-    box-shadow: 0 0 15px rgba(231, 76, 60, 0.5);
+    background: linear-gradient(to right, var(--primary-color), var(--primary-dark));
+    box-shadow: 0 4px 15px rgba(231, 76, 60, 0.3);
   }
 
-  /* حاوية المباريات والقنوات */
+  /* حاوية المحتوى */
   .content-container {
-    padding: 0 20px 50px;
     max-width: 1400px;
     margin: 0 auto;
-  }
-
-  .matches-container, .channels-container {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: 25px;
-    animation: fadeIn 0.5s ease;
-  }
-
-  @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(20px); }
-    to { opacity: 1; transform: translateY(0); }
+    padding: 40px 20px;
   }
 
   /* بطاقات المباريات */
-  .match-card {
-    background: rgba(255, 255, 255, 0.95);
-    border-radius: var(--radius);
-    box-shadow: var(--shadow);
-    width: 350px;
+  .matches-container, .channels-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+    gap: 30px;
+    padding: 20px 0;
+  }
+
+  .match-card, .channel-card {
+    background: var(--card-bg);
+    border-radius: 20px;
     overflow: hidden;
+    box-shadow: var(--shadow);
     transition: var(--transition);
-    cursor: pointer;
     position: relative;
-    border: 1px solid rgba(0,0,0,0.05);
   }
 
-  .match-card::before {
-    content: "";
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 5px;
-    background: linear-gradient(to right, var(--secondary), var(--accent));
+  .dark .match-card, .dark .channel-card {
+    background: var(--dark-card);
+    box-shadow: var(--shadow-dark);
   }
 
-  .match-card:hover {
+  .match-card:hover, .channel-card:hover {
     transform: translateY(-10px);
-    box-shadow: 0 15px 30px rgba(0,0,0,0.15);
+    box-shadow: 0 15px 35px rgba(0,0,0,0.2);
   }
 
-  body.dark .match-card {
-    background: rgba(30, 30, 40, 0.95);
-    border: 1px solid rgba(255,255,255,0.05);
-  }
-
-  .match-card img {
+  .match-poster {
     width: 100%;
     height: 200px;
     object-fit: cover;
+    border-bottom: 3px solid var(--primary-color);
   }
 
   .match-info {
-    padding: 20px;
+    padding: 25px;
   }
 
   .match-info h3 {
-    font-size: 1.3rem;
-    margin-bottom: 20px;
-    color: var(--primary);
     text-align: center;
-  }
-
-  body.dark .match-info h3 {
-    color: var(--secondary);
+    margin-bottom: 20px;
+    color: var(--primary-color);
+    font-size: 22px;
   }
 
   .teams {
     display: flex;
-    justify-content: space-around;
+    justify-content: space-between;
     align-items: center;
-    margin: 15px 0;
+    margin: 20px 0;
   }
 
   .team {
     display: flex;
     flex-direction: column;
     align-items: center;
-    width: 40%;
+    flex: 1;
   }
 
   .team img {
-    width: 80px;
-    height: 80px;
+    width: 70px;
+    height: 70px;
     margin-bottom: 10px;
     object-fit: contain;
   }
 
-  .team span {
-    font-weight: 600;
+  .team-name {
+    font-size: 18px;
+    font-weight: bold;
     text-align: center;
-    font-size: 1rem;
-    margin-top: 5px;
   }
 
   .score {
-    font-size: 1.8rem;
-    font-weight: 800;
+    font-size: 32px;
+    font-weight: bold;
+    color: var(--primary-color);
     margin-top: 10px;
-    color: var(--accent);
-    background: rgba(231, 76, 60, 0.1);
-    padding: 5px 15px;
-    border-radius: 50px;
   }
 
   .vs {
-    font-weight: 900;
-    font-size: 1.3rem;
-    color: var(--primary);
-  }
-
-  body.dark .vs {
-    color: var(--secondary);
+    font-size: 24px;
+    font-weight: bold;
+    color: var(--secondary-color);
+    padding: 0 20px;
   }
 
   .match-date {
-    margin-top: 15px;
-    color: var(--gray);
-    font-size: 0.9rem;
     text-align: center;
-    padding: 10px;
-    background: rgba(149, 165, 166, 0.1);
-    border-radius: 8px;
+    margin: 15px 0;
+    color: #666;
+    font-size: 16px;
   }
 
+  .dark .match-date {
+    color: #aaa;
+  }
+
+  /* أزرار المشاهدة */
   .watch-btn {
-    display: block;
     width: 100%;
-    margin-top: 15px;
-    padding: 12px;
-    background: linear-gradient(to right, var(--secondary), var(--accent));
-    color: #fff;
+    padding: 15px;
+    background: linear-gradient(to right, var(--primary-color), var(--primary-dark));
+    color: white;
     border: none;
-    border-radius: var(--radius);
+    border-radius: 10px;
+    font-size: 18px;
+    font-weight: bold;
     cursor: pointer;
-    font-weight: 700;
-    font-size: 1.1rem;
     transition: var(--transition);
+    margin-top: 15px;
   }
 
   .watch-btn:hover {
-    opacity: 0.9;
-    box-shadow: 0 5px 15px rgba(231, 76, 60, 0.3);
+    background: linear-gradient(to right, var(--primary-dark), #a93226);
+    transform: scale(1.02);
   }
 
-  /* بطاقات القنوات */
-  .channels-container {
-    display: none;
-  }
-
-  .channel-card {
-    background: rgba(255, 255, 255, 0.95);
-    border-radius: var(--radius);
-    box-shadow: var(--shadow);
-    width: 300px;
-    overflow: hidden;
-    transition: var(--transition);
-    text-align: center;
-    border: 1px solid rgba(0,0,0,0.05);
-    position: relative;
-  }
-
-  body.dark .channel-card {
-    background: rgba(30, 30, 40, 0.95);
-    border: 1px solid rgba(255,255,255,0.05);
-  }
-
-  .channel-card:hover {
-    transform: translateY(-10px);
-    box-shadow: 0 15px 30px rgba(0,0,0,0.15);
-  }
-
-  .channel-card img {
-    width: 100%;
-    height: 180px;
-    object-fit: cover;
-  }
-
-  .channel-card h4 {
-    padding: 20px;
-    font-size: 1.3rem;
-    color: var(--primary);
-  }
-
-  body.dark .channel-card h4 {
-    color: var(--secondary);
-  }
-
-  /* نافذة الفيديو */
+  /* نافذة المشاهدة */
   .modal {
     display: none;
     position: fixed;
-    z-index: 1000;
-    left: 0;
     top: 0;
+    left: 0;
     width: 100%;
     height: 100%;
-    background: rgba(0, 0, 0, 0.9);
+    background: rgba(0,0,0,0.9);
+    z-index: 2000;
     justify-content: center;
     align-items: center;
-    animation: fadeInModal 0.3s ease;
+    padding: 20px;
   }
 
-  @keyframes fadeInModal {
-    from { opacity: 0; }
-    to { opacity: 1; }
+  .modal.active {
+    display: flex;
   }
 
   .modal-content {
-    position: relative;
-    width: 90%;
+    background: var(--card-bg);
+    border-radius: 20px;
+    width: 100%;
     max-width: 1000px;
-    border-radius: 15px;
+    max-height: 90vh;
     overflow: hidden;
-    box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+    position: relative;
+    animation: modalFade 0.3s ease;
   }
 
-  .modal video {
-    width: 100%;
-    height: auto;
-    display: block;
-    background: #000;
+  @keyframes modalFade {
+    from { opacity: 0; transform: scale(0.9); }
+    to { opacity: 1; transform: scale(1); }
+  }
+
+  .dark .modal-content {
+    background: var(--dark-card);
+  }
+
+  .modal-header {
+    padding: 20px;
+    background: linear-gradient(135deg, var(--primary-color), var(--primary-dark));
+    color: white;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
   }
 
   .close-modal {
-    position: absolute;
-    top: -15px;
-    left: -15px;
-    background: var(--accent);
-    color: #fff;
+    background: none;
     border: none;
-    border-radius: 50%;
+    color: white;
+    font-size: 30px;
+    cursor: pointer;
     width: 40px;
     height: 40px;
-    font-size: 20px;
-    cursor: pointer;
-    z-index: 10;
     display: flex;
     align-items: center;
     justify-content: center;
+    border-radius: 50%;
     transition: var(--transition);
   }
 
   .close-modal:hover {
-    transform: scale(1.1);
-    background: #c0392b;
+    background: rgba(255,255,255,0.2);
   }
 
-  /* أزرار التحكم */
-  #toggleTheme {
-    position: fixed;
-    top: 20px;
-    right: 20px;
-    padding: 12px;
-    border-radius: 50%;
+  .video-container {
+    padding: 20px;
+  }
+
+  .video-wrapper {
+    position: relative;
+    width: 100%;
+    padding-bottom: 56.25%; /* نسبة 16:9 */
+    background: #000;
+    border-radius: 10px;
+    overflow: hidden;
+  }
+
+  .video-wrapper iframe {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
     border: none;
-    background: var(--secondary);
-    color: #fff;
-    cursor: pointer;
-    z-index: 100;
-    box-shadow: 0 5px 15px rgba(0,0,0,0.2);
-    transition: var(--transition);
-    font-size: 1.2rem;
   }
 
-  #toggleTheme:hover {
-    transform: rotate(30deg);
-    background: var(--primary);
-  }
-
-  #menuBtn {
-    position: fixed;
-    top: 20px;
-    left: 20px;
-    padding: 12px;
-    border-radius: 50%;
-    border: none;
-    background: var(--primary);
-    color: #fff;
-    cursor: pointer;
-    z-index: 100;
-    box-shadow: 0 5px 15px rgba(0,0,0,0.2);
-    transition: var(--transition);
-    font-size: 1.2rem;
-  }
-
-  #menuBtn:hover {
-    background: var(--accent);
-    transform: scale(1.1);
-  }
-
-  /* لوحة القائمة */
+  /* القائمة الجانبية */
   .menu-panel {
+    position: fixed;
+    top: 0;
+    left: -300px;
+    width: 300px;
+    height: 100vh;
+    background: var(--card-bg);
+    z-index: 1001;
+    transition: var(--transition);
+    box-shadow: 5px 0 25px rgba(0,0,0,0.2);
+    padding: 80px 20px 20px;
+  }
+
+  .menu-panel.active {
+    left: 0;
+  }
+
+  .dark .menu-panel {
+    background: var(--dark-card);
+  }
+
+  .menu-overlay {
     display: none;
     position: fixed;
-    top: 70px;
-    left: 20px;
-    background: rgba(255, 255, 255, 0.95);
-    padding: 20px;
-    border-radius: var(--radius);
-    box-shadow: var(--shadow);
-    z-index: 100;
-    min-width: 250px;
-    backdrop-filter: blur(10px);
-    animation: slideIn 0.3s ease;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.5);
+    z-index: 1000;
   }
 
-  body.dark .menu-panel {
-    background: rgba(30, 30, 40, 0.95);
-  }
-
-  @keyframes slideIn {
-    from { opacity: 0; transform: translateY(-10px); }
-    to { opacity: 1; transform: translateY(0); }
+  .menu-overlay.active {
+    display: block;
   }
 
   .menu-panel a {
-    display: block;
-    margin: 12px 0;
-    color: var(--primary);
+    display: flex;
+    align-items: center;
+    padding: 15px;
+    margin: 10px 0;
+    background: var(--light-bg);
+    border-radius: 10px;
+    color: var(--text-light);
     text-decoration: none;
-    font-weight: 600;
-    padding: 10px 15px;
-    border-radius: 8px;
+    font-weight: bold;
     transition: var(--transition);
   }
 
-  body.dark .menu-panel a {
-    color: var(--secondary);
+  .dark .menu-panel a {
+    background: #2d2d2d;
+    color: var(--text-dark);
   }
 
   .menu-panel a:hover {
-    background: rgba(26, 188, 156, 0.1);
-    padding-right: 20px;
-    color: var(--accent);
+    background: var(--secondary-color);
+    color: white;
+    transform: translateX(10px);
   }
 
   .menu-panel a i {
     margin-left: 10px;
+    font-size: 20px;
   }
 
   /* نافذة الترحيب */
   #welcomeModal {
-    display: none;
     position: fixed;
-    z-index: 2000;
-    left: 0;
     top: 0;
+    left: 0;
     width: 100%;
     height: 100%;
-    background: rgba(0, 0, 0, 0.85);
+    background: rgba(0,0,0,0.9);
+    z-index: 3000;
+    display: none;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+  }
+
+  #welcomeModal.active {
+    display: flex;
+  }
+
+  .welcome-content {
+    background: linear-gradient(135deg, #2c3e50, #4a6491);
+    border-radius: 20px;
+    padding: 40px;
+    text-align: center;
+    max-width: 500px;
+    width: 100%;
+    color: white;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+  }
+
+  .welcome-content h2 {
+    margin-bottom: 20px;
+    font-size: 28px;
+  }
+
+  .welcome-content p {
+    margin-bottom: 30px;
+    font-size: 18px;
+    line-height: 1.6;
+  }
+
+  .welcome-buttons {
+    display: flex;
+    gap: 20px;
+    justify-content: center;
+  }
+
+  .welcome-buttons button {
+    padding: 15px 40px;
+    border: none;
+    border-radius: 50px;
+    font-size: 18px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: var(--transition);
+    min-width: 150px;
+  }
+
+  .welcome-buttons .join {
+    background: linear-gradient(to right, #27ae60, #229954);
+    color: white;
+  }
+
+  .welcome-buttons .join:hover {
+    transform: scale(1.05);
+    box-shadow: 0 10px 20px rgba(39, 174, 96, 0.3);
+  }
+
+  .welcome-buttons .cancel {
+    background: rgba(255,255,255,0.2);
+    color: white;
+    border: 2px solid white;
+  }
+
+  .welcome-buttons .cancel:hover {
+    background: rgba(255,255,255,0.3);
+  }
+
+  /* التنبيهات */
+  .notification {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: var(--primary-color);
+    color: white;
+    padding: 15px 25px;
+    border-radius: 10px;
+    box-shadow: var(--shadow);
+    display: none;
+    z-index: 1000;
+    animation: slideIn 0.3s ease;
+  }
+
+  @keyframes slideIn {
+    from { transform: translateX(100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+  }
+
+  /* التحميل */
+  .loader {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.8);
+    z-index: 9999;
     justify-content: center;
     align-items: center;
   }
 
-  #welcomeModal .welcome-content {
-    background: linear-gradient(to bottom right, #fff, #f8f9fa);
-    padding: 30px;
-    border-radius: var(--radius);
-    text-align: center;
-    max-width: 450px;
-    width: 90%;
-    box-shadow: 0 20px 50px rgba(0,0,0,0.3);
-    animation: popUp 0.5s ease;
-    border-top: 5px solid var(--accent);
+  .loader.active {
+    display: flex;
   }
 
-  body.dark #welcomeModal .welcome-content {
-    background: linear-gradient(to bottom right, #1a1a2e, #16213e);
-    color: #f0f0f0;
-  }
-
-  @keyframes popUp {
-    0% { transform: scale(0.8); opacity: 0; }
-    100% { transform: scale(1); opacity: 1; }
-  }
-
-  #welcomeModal h3 {
-    color: var(--primary);
-    margin-bottom: 15px;
-    font-size: 1.5rem;
-  }
-
-  #welcomeModal p {
-    margin-bottom: 25px;
-    font-size: 1.1rem;
-  }
-
-  #welcomeModal button {
-    margin: 10px;
-    padding: 12px 25px;
-    border-radius: var(--radius);
-    border: none;
-    cursor: pointer;
-    font-weight: 700;
-    font-size: 1rem;
-    transition: var(--transition);
-  }
-
-  #welcomeModal .join {
-    background: linear-gradient(to right, var(--secondary), var(--accent));
-    color: #fff;
-  }
-
-  #welcomeModal .join:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 8px 15px rgba(231, 76, 60, 0.3);
-  }
-
-  #welcomeModal .cancel {
-    background: transparent;
-    color: var(--gray);
-    border: 2px solid var(--gray);
-  }
-
-  #welcomeModal .cancel:hover {
-    background: var(--gray);
-    color: white;
-  }
-
-  /* تذييل الصفحة */
-  .footer {
-    text-align: center;
-    padding: 25px;
-    background: rgba(44, 62, 80, 0.9);
-    color: white;
-    margin-top: 50px;
-    border-top-left-radius: 30px;
-    border-top-right-radius: 30px;
-  }
-
-  body.dark .footer {
-    background: rgba(18, 18, 18, 0.9);
-  }
-
-  .footer p {
-    margin-bottom: 10px;
-  }
-
-  .footer a {
-    color: var(--secondary);
-    text-decoration: none;
-    font-weight: 600;
-  }
-
-  /* تحسينات للجوال */
-  @media (max-width: 768px) {
-    .match-card, .channel-card {
-      width: 100%;
-      max-width: 400px;
-    }
-    
-    .main-buttons button {
-      margin: 5px;
-      padding: 12px 20px;
-      font-size: 1rem;
-    }
-    
-    .logo-container img {
-      height: 65px;
-    }
-    
-    #toggleTheme, #menuBtn {
-      padding: 10px;
-      top: 15px;
-    }
-    
-    .modal-content {
-      width: 95%;
-    }
-  }
-
-  /* تأثيرات إضافية */
-  .live-indicator {
-    position: absolute;
-    top: 15px;
-    left: 15px;
-    background: var(--accent);
-    color: white;
-    padding: 5px 15px;
-    border-radius: 50px;
-    font-size: 0.9rem;
-    font-weight: 700;
-    z-index: 2;
-    animation: pulse 2s infinite;
-  }
-
-  @keyframes pulse {
-    0% { box-shadow: 0 0 0 0 rgba(231, 76, 60, 0.7); }
-    70% { box-shadow: 0 0 0 10px rgba(231, 76, 60, 0); }
-    100% { box-shadow: 0 0 0 0 rgba(231, 76, 60, 0); }
-  }
-
-  .loader {
-    display: none;
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    z-index: 9999;
-  }
-
-  .loader::after {
-    content: "";
-    display: block;
-    width: 60px;
-    height: 60px;
-    border-radius: 50%;
+  .spinner {
+    width: 70px;
+    height: 70px;
     border: 5px solid #f3f3f3;
-    border-top: 5px solid var(--secondary);
+    border-top: 5px solid var(--primary-color);
+    border-radius: 50%;
     animation: spin 1s linear infinite;
   }
 
@@ -647,74 +539,301 @@
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
   }
+
+  /* التجاوب */
+  @media (max-width: 768px) {
+    .main-buttons {
+      padding: 20px 10px;
+    }
+
+    .main-buttons button {
+      padding: 12px 20px;
+      min-width: 140px;
+      font-size: 16px;
+      margin: 5px;
+    }
+
+    .matches-container, .channels-container {
+      grid-template-columns: 1fr;
+      gap: 20px;
+    }
+
+    .match-card, .channel-card {
+      margin: 0 10px;
+    }
+
+    .teams {
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .vs {
+      padding: 10px 0;
+    }
+
+    .menu-panel {
+      width: 280px;
+    }
+
+    .welcome-content {
+      padding: 30px 20px;
+    }
+
+    .welcome-buttons {
+      flex-direction: column;
+    }
+
+    .welcome-buttons button {
+      width: 100%;
+    }
+  }
+
+  /* بطاقات القنوات المحسنة */
+  .channel-card {
+    text-align: center;
+    padding: 25px;
+  }
+
+  .channel-logo {
+    width: 120px;
+    height: 120px;
+    object-fit: contain;
+    margin: 0 auto 20px;
+    border-radius: 10px;
+    padding: 15px;
+    background: var(--light-bg);
+  }
+
+  .dark .channel-logo {
+    background: #2d2d2d;
+  }
+
+  .channel-name {
+    font-size: 22px;
+    font-weight: bold;
+    margin-bottom: 20px;
+    color: var(--primary-color);
+  }
+
+  .channel-quality {
+    display: inline-block;
+    background: var(--secondary-color);
+    color: white;
+    padding: 5px 15px;
+    border-radius: 20px;
+    font-size: 14px;
+    margin-bottom: 15px;
+  }
+
+  .channel-desc {
+    color: #666;
+    margin-bottom: 20px;
+    font-size: 15px;
+    line-height: 1.5;
+  }
+
+  .dark .channel-desc {
+    color: #aaa;
+  }
 </style>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
 
-<!-- أزرار التحكم -->
-<button id="menuBtn">☰</button>
-<button id="toggleTheme">🌓</button>
-
-<!-- لوحة القائمة -->
+<!-- القائمة الجانبية -->
+<div class="menu-overlay" id="menuOverlay"></div>
 <div class="menu-panel" id="menuPanel">
-  <a href="https://t.me/Yacin_HD" target="_blank"><i>📢</i> قناة تلجرام</a>
-  <a href="https://t.me/J_WW22" target="_blank"><i>👨‍💻</i> حساب المطور</a>
-  <a href="https://www.facebook.com/profile.php?id=100052854003446" target="_blank"><i>📘</i> صفحة الفيسبوك</a>
+  <a href="https://t.me/Yacin_HD" target="_blank">
+    <i class="fab fa-telegram"></i>
+    قناة تلجرام الرسمية
+  </a>
+  <a href="https://t.me/J_WW22" target="_blank">
+    <i class="fab fa-telegram"></i>
+    حساب المطور
+  </a>
+  <a href="https://www.facebook.com/profile.php?id=100052854003446" target="_blank">
+    <i class="fab fa-facebook"></i>
+    فيسبوك المطور
+  </a>
+  <a href="#" id="donateBtn">
+    <i class="fas fa-heart"></i>
+    دعم الموقع
+  </a>
+  <a href="#" id="aboutBtn">
+    <i class="fas fa-info-circle"></i>
+    حول الموقع
+  </a>
+</div>
+
+<!-- أزرار التحكم العائمة -->
+<div class="floating-buttons">
+  <button id="menuBtn">
+    <i class="fas fa-bars"></i>
+  </button>
+  <button id="toggleTheme">
+    <i class="fas fa-moon"></i>
+  </button>
+</div>
+
+<!-- تحميل -->
+<div class="loader" id="loader">
+  <div class="spinner"></div>
 </div>
 
 <!-- شعار الموقع -->
 <div class="logo-container">
-  <img src="https://f.top4top.io/p_3656l7nyx0.png" alt="شعار موقع كأس إفريقيا">
+  <img src="https://f.top4top.io/p_3656l7nyx0.png" alt="شعار بث مباشر - كأس إفريقيا">
 </div>
 
-<!-- أزرار رئيسية -->
+<!-- أزرار التنقل الرئيسية -->
 <div class="main-buttons">
-  <button id="showMatchesBtn" class="active">المباريات</button>
-  <button id="showChannelsBtn">القنوات</button>
+  <button id="showMatchesBtn" class="active">
+    <i class="fas fa-futbol"></i> المباريات
+  </button>
+  <button id="showChannelsBtn">
+    <i class="fas fa-tv"></i> القنوات الناقلة
+  </button>
 </div>
 
-<!-- محتوى الصفحة -->
+<!-- المحتوى الرئيسي -->
 <div class="content-container">
   <!-- واجهة المباريات -->
   <div class="matches-container" id="matches"></div>
   
   <!-- واجهة القنوات -->
-  <div class="channels-container" id="channels"></div>
+  <div class="channels-container" id="channels" style="display:none;"></div>
 </div>
 
-<!-- نافذة الفيديو -->
+<!-- نافذة المشاهدة -->
 <div class="modal" id="videoModal">
   <div class="modal-content">
-    <button class="close-modal" id="closeModal">&times;</button>
-    <video id="matchVideo" controls autoplay></video>
+    <div class="modal-header">
+      <h3 id="modalTitle">مشاهدة البث المباشر</h3>
+      <button class="close-modal" id="closeModal">
+        <i class="fas fa-times"></i>
+      </button>
+    </div>
+    <div class="video-container">
+      <div class="video-wrapper">
+        <iframe id="matchVideo" allowfullscreen></iframe>
+      </div>
+    </div>
   </div>
 </div>
 
 <!-- نافذة الترحيب -->
 <div class="modal" id="welcomeModal">
   <div class="welcome-content">
-    <h3>مرحباً بك في موقع كأس إفريقيا</h3>
-    <p>لمشاهدة المباريات مباشرة والحصول على آخر التحديثات، انضم إلى قناتنا على تلجرام</p>
-    <button class="join" onclick="joinTelegram()">انضمام للقناة</button>
-    <button class="cancel" onclick="closeWelcome()">المتابعة كزائر</button>
+    <h2>مرحباً بك! 👋</h2>
+    <p>🚀 موقع بث مباشر لمباريات كأس إفريقيا للأمم 2025</p>
+    <p>📢 انضم لقناتنا على تلجرام للحصول على أحدث التحديثات وروابط البث المباشر أولاً بأول</p>
+    <div class="welcome-buttons">
+      <button class="join" onclick="joinTelegram()">
+        <i class="fab fa-telegram"></i> انضمام للقناة
+      </button>
+      <button class="cancel" onclick="closeWelcome()">
+        <i class="fas fa-times"></i> متابعة دون انضمام
+      </button>
+    </div>
   </div>
 </div>
 
-<!-- تذييل الصفحة -->
-<div class="footer">
-  <p>موقع نتائج كأس إفريقيا - AFCON مباشر</p>
-  <p>تابعنا على: <a href="https://t.me/Yacin_HD" target="_blank">تلجرام</a> | <a href="https://t.me/J_WW22" target="_blank">المطور</a></p>
-  <p>© 2025 جميع الحقوق محفوظة</p>
-</div>
-
-<!-- مؤشر التحميل -->
-<div class="loader" id="loader"></div>
+<!-- تنبيه -->
+<div class="notification" id="notification"></div>
 
 <script>
-// دالة لتحميل المباريات
-async function fetchMatches() {
+// تهيئة التطبيق
+document.addEventListener('DOMContentLoaded', function() {
+  // إظهار نافذة الترحيب للمرة الأولى فقط
+  if(!localStorage.getItem('welcomeShown')) {
+    setTimeout(() => {
+      document.getElementById('welcomeModal').classList.add('active');
+    }, 1000);
+    localStorage.setItem('welcomeShown', 'true');
+  }
+
+  // تحميل البيانات
+  loadData();
+});
+
+// وظائف القائمة
+const menuBtn = document.getElementById('menuBtn');
+const menuPanel = document.getElementById('menuPanel');
+const menuOverlay = document.getElementById('menuOverlay');
+
+menuBtn.addEventListener('click', () => {
+  menuPanel.classList.toggle('active');
+  menuOverlay.classList.toggle('active');
+});
+
+menuOverlay.addEventListener('click', () => {
+  menuPanel.classList.remove('active');
+  menuOverlay.classList.remove('active');
+});
+
+// الوضع الليلي
+const toggleTheme = document.getElementById('toggleTheme');
+toggleTheme.addEventListener('click', () => {
+  document.body.classList.toggle('dark');
+  const icon = toggleTheme.querySelector('i');
+  if(document.body.classList.contains('dark')) {
+    icon.classList.remove('fa-moon');
+    icon.classList.add('fa-sun');
+    showNotification('تم تفعيل الوضع الليلي');
+  } else {
+    icon.classList.remove('fa-sun');
+    icon.classList.add('fa-moon');
+    showNotification('تم تفعيل الوضع النهاري');
+  }
+});
+
+// أزرار التنقل
+const showMatchesBtn = document.getElementById('showMatchesBtn');
+const showChannelsBtn = document.getElementById('showChannelsBtn');
+const matchesContainer = document.getElementById('matches');
+const channelsContainer = document.getElementById('channels');
+
+showMatchesBtn.addEventListener('click', () => {
+  showMatchesBtn.classList.add('active');
+  showChannelsBtn.classList.remove('active');
+  matchesContainer.style.display = 'grid';
+  channelsContainer.style.display = 'none';
+  showNotification('عرض المباريات');
+});
+
+showChannelsBtn.addEventListener('click', () => {
+  showChannelsBtn.classList.add('active');
+  showMatchesBtn.classList.remove('active');
+  channelsContainer.style.display = 'grid';
+  matchesContainer.style.display = 'none';
+  showNotification('عرض القنوات الناقلة');
+});
+
+// تحميل البيانات
+async function loadData() {
+  showLoader();
+  
   try {
-    showLoader();
+    // تحميل المباريات
+    await fetchMatches();
+    
+    // تحميل القنوات
+    loadChannels();
+    
+    setTimeout(hideLoader, 500);
+  } catch (error) {
+    console.error('Error loading data:', error);
+    showNotification('حدث خطأ في تحميل البيانات');
+    hideLoader();
+  }
+}
+
+// جلب المباريات
+async function fetchMatches() {
+  const matchesContainer = document.getElementById('matches');
+  matchesContainer.innerHTML = '<div style="text-align:center;padding:40px;width:100%;"><h3>جاري تحميل المباريات...</h3></div>';
+
+  try {
     const res = await fetch('https://api.sportsrc.org/?data=matches&category=football');
     const json = await res.json();
     
@@ -722,301 +841,52 @@ async function fetchMatches() {
       const matchesContainer = document.getElementById('matches');
       matchesContainer.innerHTML = '';
       
-      // فلترة المباريات الإفريقية
-      const cafMatches = json.data.filter(match => {
-        const title = match.title.toLowerCase();
-        return title.includes('africa') || title.includes('afcon') || 
-               title.includes('morocco') || title.includes('tanzania') ||
-               title.includes('egypt') || title.includes('senegal') ||
-               title.includes('algeria') || title.includes('tunisia');
-      });
-      
-      // إذا لم نجد مباريات إفريقية، نعرض بعض المباريات الافتراضية
-      const matchesToShow = cafMatches.length > 0 ? cafMatches : getDefaultMatches();
-      
-      matchesToShow.forEach((match, index) => {
-        const date = new Date(match.date).toLocaleString('ar-DZ', {
+      const cafMatches = json.data.filter(match => 
+        match.title.toLowerCase().includes('africa') || 
+        match.title.toLowerCase().includes('afcon') ||
+        match.title.toLowerCase().includes('can') ||
+        match.title.toLowerCase().includes('morocco') ||
+        match.title.toLowerCase().includes('tanzania')
+      );
+
+      if(cafMatches.length === 0) {
+        matchesContainer.innerHTML = `
+          <div style="text-align:center;padding:40px;width:100%;">
+            <h3>لا توجد مباريات حالياً</h3>
+            <p>سيتم تحديث المباريات قريباً</p>
+          </div>
+        `;
+        return;
+      }
+
+      cafMatches.forEach((match, index) => {
+        const date = new Date(match.date);
+        const formattedDate = date.toLocaleString('ar-SA', {
+          weekday: 'long',
           year: 'numeric',
           month: 'long',
           day: 'numeric',
           hour: '2-digit',
-          minute: '2-digit',
-          hour12: false
+          minute: '2-digit'
         });
-        
+
         const homeScore = match.score?.home ?? "-";
         const awayScore = match.score?.away ?? "-";
-        const isLive = index === 0;
         
         const card = document.createElement('div');
         card.className = 'match-card';
-        
         card.innerHTML = `
-          ${isLive ? '<div class="live-indicator">🔴 مباشر</div>' : ''}
-          <div class="poster">
-            <img src="${match.poster || 'https://images.unsplash.com/photo-1556056504-5c7696c4c28d?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80'}" alt="${match.title}">
-          </div>
+          <img src="${match.poster || 'https://images.unsplash.com/photo-1598880940080-ff9a29891b85?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80'}" 
+               alt="${match.title}" class="match-poster">
           <div class="match-info">
             <h3>${match.title}</h3>
             <div class="teams">
               <div class="team">
-                <img src="${match.teams.home.badge || 'https://via.placeholder.com/80x80/2c3e50/ffffff?text=Team'}" alt="${match.teams.home.name}">
-                <span>${match.teams.home.name}</span>
+                <img src="${match.teams.home.badge}" alt="${match.teams.home.name}">
+                <div class="team-name">${match.teams.home.name}</div>
                 <div class="score">${homeScore}</div>
               </div>
               <div class="vs">VS</div>
               <div class="team">
-                <img src="${match.teams.away.badge || 'https://via.placeholder.com/80x80/2c3e50/ffffff?text=Team'}" alt="${match.teams.away.name}">
-                <span>${match.teams.away.name}</span>
-                <div class="score">${awayScore}</div>
-              </div>
-            </div>
-            <div class="match-date">${date}</div>
-            ${isLive ? '<button class="watch-btn">شاهد البث المباشر</button>' : '<button class="watch-btn" style="background: #95a5a6;">شاهد التوقيتات</button>'}
-          </div>
-        `;
-        
-        // إضافة حدث لمشاهدة البث
-        const watchBtn = card.querySelector('.watch-btn');
-        if (isLive) {
-          const videoUrl = "https://prod-fastly-us-west-2.video.pscp.tv/Transcoding/v1/hls/jpg_FLY3NdH72LrTKw_OmImQ5YCOi8g-HDs5ydMQTtKUYxBOCt3WUl0_bCwrM-DbUU03oQo1564d-250hW2EMQ/transcode/us-west-2/periscope-replay-direct-prod-us-west-2-public/eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCIsInZlcnNpb24iOiIyIn0.eyJFbmNvZGVyU2V0dGluZyI6ImVuY29kZXJfc2V0dGluZ18xMDgwcDMwXzEwIiwiSGVpZ2h0IjoxMDgwLCJLYnBzIjo1NTAwLCJXaWR0aCI6MTkyMH0.OImMZabKYJ0cs9CnIapU-4aBk6KNBiJxi1hh-6l4BZ4/dynamic_highlatency.m3u8?type=live";
-          watchBtn.addEventListener('click', () => openVideo(videoUrl));
-        } else {
-          watchBtn.addEventListener('click', () => {
-            alert('سيتم بث المباراة في التاريخ المحدد');
-          });
-        }
-        
-        matchesContainer.appendChild(card);
-      });
-    } else {
-      // إذا فشل جلب البيانات، نعرض مباريات افتراضية
-      loadDefaultMatches();
-    }
-  } catch(err) {
-    console.error('خطأ في جلب البيانات:', err);
-    loadDefaultMatches();
-  } finally {
-    hideLoader();
-  }
-}
-
-// مباريات افتراضية للعرض
-function getDefaultMatches() {
-  return [
-    {
-      title: "مصر vs السنغال - كأس إفريقيا",
-      poster: "https://images.unsplash.com/photo-1556056504-5c7696c4c28d?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80",
-      date: new Date(Date.now() + 86400000).toISOString(),
-      score: { home: "-", away: "-" },
-      teams: {
-        home: { name: "مصر", badge: "https://upload.wikimedia.org/wikipedia/commons/thumb/f/fe/Flag_of_Egypt.svg/800px-Flag_of_Egypt.svg.png" },
-        away: { name: "السنغال", badge: "https://upload.wikimedia.org/wikipedia/commons/thumb/f/fd/Flag_of_Senegal.svg/800px-Flag_of_Senegal.svg.png" }
-      }
-    },
-    {
-      title: "المغرب vs الجزائر - كأس إفريقيا",
-      poster: "https://images.unsplash.com/photo-1574623452334-1e0ac2b3ccb4?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80",
-      date: new Date(Date.now() + 172800000).toISOString(),
-      score: { home: "-", away: "-" },
-      teams: {
-        home: { name: "المغرب", badge: "https://upload.wikimedia.org/wikipedia/commons/thumb/2/2c/Flag_of_Morocco.svg/800px-Flag_of_Morocco.svg.png" },
-        away: { name: "الجزائر", badge: "https://upload.wikimedia.org/wikipedia/commons/thumb/7/77/Flag_of_Algeria.svg/800px-Flag_of_Algeria.svg.png" }
-      }
-    }
-  ];
-}
-
-function loadDefaultMatches() {
-  const matchesContainer = document.getElementById('matches');
-  matchesContainer.innerHTML = '';
-  
-  const defaultMatches = getDefaultMatches();
-  
-  defaultMatches.forEach((match, index) => {
-    const date = new Date(match.date).toLocaleString('ar-DZ', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false
-    });
-    
-    const card = document.createElement('div');
-    card.className = 'match-card';
-    
-    card.innerHTML = `
-      <div class="poster">
-        <img src="${match.poster}" alt="${match.title}">
-      </div>
-      <div class="match-info">
-        <h3>${match.title}</h3>
-        <div class="teams">
-          <div class="team">
-            <img src="${match.teams.home.badge}" alt="${match.teams.home.name}">
-            <span>${match.teams.home.name}</span>
-            <div class="score">${match.score.home}</div>
-          </div>
-          <div class="vs">VS</div>
-          <div class="team">
-            <img src="${match.teams.away.badge}" alt="${match.teams.away.name}">
-            <span>${match.teams.away.name}</span>
-            <div class="score">${match.score.away}</div>
-          </div>
-        </div>
-        <div class="match-date">${date}</div>
-        <button class="watch-btn" style="background: #95a5a6;">شاهد التوقيتات</button>
-      </div>
-    `;
-    
-    matchesContainer.appendChild(card);
-  });
-}
-
-// دالة لتحميل القنوات
-function loadChannels() {
-  const channelsContainer = document.getElementById('channels');
-  channelsContainer.innerHTML = '';
-  
-  const channels = [
-    {
-      name: "beIN SPORTS AFCON 1 4K",
-      logo: "https://f.top4top.io/p_3656y12i71.jpg",
-      description: "القناة الرسمية لبث مباريات كأس إفريقيا بدقة 4K"
-    }
-  ];
-  
-  channels.forEach(ch => {
-    const card = document.createElement('div');
-    card.className = 'channel-card';
-    
-    card.innerHTML = `
-      <img src="${ch.logo}" alt="${ch.name}">
-      <h4>${ch.name}</h4>
-      <p style="padding: 0 20px 20px; color: var(--gray);">${ch.description}</p>
-    `;
-    
-    channelsContainer.appendChild(card);
-  });
-}
-
-// دالة لفتح نافذة الفيديو
-function openVideo(url) {
-  const modal = document.getElementById('videoModal');
-  const video = document.getElementById('matchVideo');
-  video.src = url;
-  modal.style.display = 'flex';
-}
-
-// دالة لإغلاق نافذة الفيديو
-function closeVideo() {
-  const modal = document.getElementById('videoModal');
-  const video = document.getElementById('matchVideo');
-  video.pause();
-  video.src = "";
-  modal.style.display = 'none';
-}
-
-// دالة للانضمام إلى قناة تلجرام
-function joinTelegram() {
-  window.open('https://t.me/Yacin_HD', '_blank');
-  closeWelcome();
-}
-
-// دالة لإغلاق نافذة الترحيب
-function closeWelcome() {
-  document.getElementById('welcomeModal').style.display = 'none';
-}
-
-// دالة لإظهار مؤشر التحميل
-function showLoader() {
-  document.getElementById('loader').style.display = 'block';
-}
-
-// دالة لإخفاء مؤشر التحميل
-function hideLoader() {
-  document.getElementById('loader').style.display = 'none';
-}
-
-// عند تحميل الصفحة
-document.addEventListener('DOMContentLoaded', function() {
-  // عرض نافذة الترحيب للمرة الأولى فقط
-  if(!localStorage.getItem('visited')) {
-    setTimeout(() => {
-      document.getElementById('welcomeModal').style.display = 'flex';
-      localStorage.setItem('visited', 'true');
-    }, 1000);
-  }
-  
-  // تحميل المباريات والقنوات
-  fetchMatches();
-  loadChannels();
-  
-  // أحداث القائمة
-  const menuBtn = document.getElementById('menuBtn');
-  const menuPanel = document.getElementById('menuPanel');
-  
-  menuBtn.addEventListener('click', () => {
-    menuPanel.style.display = menuPanel.style.display === 'block' ? 'none' : 'block';
-  });
-  
-  // إغلاق القائمة عند النقر خارجها
-  document.addEventListener('click', (e) => {
-    if (!menuBtn.contains(e.target) && !menuPanel.contains(e.target)) {
-      menuPanel.style.display = 'none';
-    }
-  });
-  
-  // حدث زر الوضع الليلي
-  const toggleThemeBtn = document.getElementById('toggleTheme');
-  
-  // التحقق من التفضيل المحفوظ
-  if (localStorage.getItem('theme') === 'dark') {
-    document.body.classList.add('dark');
-    toggleThemeBtn.textContent = '☀️';
-  }
-  
-  toggleThemeBtn.addEventListener('click', () => {
-    document.body.classList.toggle('dark');
-    
-    if (document.body.classList.contains('dark')) {
-      localStorage.setItem('theme', 'dark');
-      toggleThemeBtn.textContent = '☀️';
-    } else {
-      localStorage.setItem('theme', 'light');
-      toggleThemeBtn.textContent = '🌓';
-    }
-  });
-  
-  // أحداث الأزرار الرئيسية
-  const showMatchesBtn = document.getElementById('showMatchesBtn');
-  const showChannelsBtn = document.getElementById('showChannelsBtn');
-  
-  showMatchesBtn.addEventListener('click', () => {
-    document.getElementById('matches').style.display = 'flex';
-    document.getElementById('channels').style.display = 'none';
-    showMatchesBtn.classList.add('active');
-    showChannelsBtn.classList.remove('active');
-  });
-  
-  showChannelsBtn.addEventListener('click', () => {
-    document.getElementById('matches').style.display = 'none';
-    document.getElementById('channels').style.display = 'flex';
-    showChannelsBtn.classList.add('active');
-    showMatchesBtn.classList.remove('active');
-  });
-  
-  // حدث إغلاق نافذة الفيديو
-  document.getElementById('closeModal').addEventListener('click', closeVideo);
-  
-  // إغلاق نافذة الفيديو عند النقر خارجها
-  document.getElementById('videoModal').addEventListener('click', (e) => {
-    if (e.target.id === 'videoModal') {
-      closeVideo();
-    }
-  });
-});
-</script>
-</body>
-</html>
+                <img src="${match.teams.away.badge}" alt="${match.teams.away.name}">
+                <div class="team-name">${match.teams.away.name}</d
