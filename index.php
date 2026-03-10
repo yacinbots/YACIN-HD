@@ -42,30 +42,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (!$data || ($data['object'] ?? '') !== 'page') exit;
 
-    // ── مكافحة التكرار: تجاهل الـ webhook إذا كانت نفس الرسالة قيد المعالجة ──────
-    $eventId = '';
-    if (!empty($data['entry'][0]['messaging'][0]['message']['mid'])) {
-        $eventId = $data['entry'][0]['messaging'][0]['message']['mid'];
-    } elseif (!empty($data['entry'][0]['messaging'][0]['postback'])) {
-        $ts = $data['entry'][0]['messaging'][0]['timestamp'] ?? '';
-        $sid = $data['entry'][0]['messaging'][0]['sender']['id'] ?? '';
-        $eventId = "pb_{$sid}_{$ts}";
-    }
-    if ($eventId !== '') {
-        $lockFile = '/tmp/fb_lock_' . md5($eventId) . '.lock';
-        $lockFp   = fopen($lockFile, 'c');
-        if (!$lockFp || !flock($lockFp, LOCK_EX | LOCK_NB)) {
-            // هذه الرسالة قيد المعالجة بالفعل → تجاهلها
-            exit;
-        }
-        // سجّل وقت الإنشاء لتنظيف الملفات القديمة
-        fwrite($lockFp, time());
-        // تنظيف ملفات القفل القديمة (أكبر من 5 دقائق)
-        foreach (glob('/tmp/fb_lock_*.lock') as $lf) {
-            if (filemtime($lf) < time() - 300) @unlink($lf);
-        }
-    }
-
     foreach ($data['entry'] as $entry) {
         foreach ($entry['messaging'] ?? [] as $event) {
 
@@ -304,14 +280,6 @@ function handlePostback(string $psid, string $payload): void
 
 function activate2G(string $psid, array $user): void
 {
-    // منع تشغيل عمليتين لنفس المستخدم في وقت واحد
-    $userLock = '/tmp/fb_user_' . md5($psid) . '.lock';
-    $ulFp = fopen($userLock, 'c');
-    if (!$ulFp || !flock($ulFp, LOCK_EX | LOCK_NB)) {
-        sendMessage($psid, "⚠️ هناك عملية تفعيل جارية بالفعل، يرجى الانتظار.");
-        return;
-    }
-
     $msisdn        = $user['msisdn'];
     $accessToken   = $user['access_token'];
     $refreshToken  = $user['refresh_token'];
@@ -384,22 +352,11 @@ function activate2G(string $psid, array $user): void
             continue;
         }
 
-        // 🚫 unauthorized_with_tx → لم يكتمل أسبوع (transaction-id موجود)
-        if ($result['status'] === 'unauthorized_with_tx') {
-            sendMessage($psid,
-                "عذرا 😬 لم تكمل اسبوع ⚠️ اكمل اسبوع و اعد المحاولة مجددا 📆\n\n" .
-                "⚡ قناة التلقرام : https://t.me/tasjilbott"
-            );
-            clearSession($psid);
-            sendMessage($psid, "📱 أرسل رقم هاتفك للبدء من جديد.");
-            return;
-        }
-
-        // 🔄 unauthorized_no_tx → أعد المحاولة (بدون transaction-id)
+        // 🚫 unauthorized_no_tx → إعادة المحاولة حتى $maxRetries (مطابق لـ Python)
+        //    البايثون يُعيد "401 unauthorized product" بعد انتهاء المحاولات
         if ($result['status'] === 'unauthorized_no_tx') {
             $retryCnt++;
-            // بعد محاولتين → أخبر المستخدم بالتأخير (مرة واحدة فقط)
-            if ($retryCnt >= 2 && !$delaySent) {
+            if ($retryCnt === 1 && !$delaySent) {
                 sendMessage($psid, "نواجه مشاكل في التفعيل . جاري اعادة المحاولة ... تستغرق اقل من 3 دقائق 🕘");
                 $delaySent = true;
             }
@@ -414,15 +371,16 @@ function activate2G(string $psid, array $user): void
                 sendMessage($psid, "نواجه مشاكل في التفعيل . جاري اعادة المحاولة ... تستغرق اقل من 3 دقائق 🕘");
                 $delaySent = true;
             }
-            usleep(400000);
+            usleep(($result['status'] === '429') ? 2000000 : 400000);
             continue;
         }
 
         usleep(300000);
     }
 
+    // بعد انتهاء جميع المحاولات → مطابق لـ Python: "unauthorized product" = لم يكتمل اسبوع
     sendMessage($psid,
-        "هناك اشكال في سيرفر جيزي ⚠️ لم نستطع التفعيل لرقمك \n\n" .
+        "عذرا 😬 لم تكمل اسبوع ⚠️ اكمل اسبوع و اعد المحاولة مجددا 📆\n\n" .
         "⚡ قناة التلقرام : https://t.me/tasjilbott"
     );
     clearSession($psid);
@@ -435,14 +393,6 @@ function activate2G(string $psid, array $user): void
 
 function activate70DZ(string $psid, array $user): void
 {
-    // منع تشغيل عمليتين لنفس المستخدم في وقت واحد
-    $userLock = '/tmp/fb_user_' . md5($psid) . '.lock';
-    $ulFp = fopen($userLock, 'c');
-    if (!$ulFp || !flock($ulFp, LOCK_EX | LOCK_NB)) {
-        sendMessage($psid, "⚠️ هناك عملية تفعيل جارية بالفعل، يرجى الانتظار.");
-        return;
-    }
-
     $msisdn        = $user['msisdn'];
     $accessToken   = $user['access_token'];
     $refreshToken  = $user['refresh_token'];
@@ -513,11 +463,12 @@ function activate70DZ(string $psid, array $user): void
             continue;
         }
 
-        // 🚫 unauthorized_no_tx / unauthorized_with_tx → أعد المحاولة حتى maxUnauthorized
-        if (in_array($result['status'], ['unauthorized_no_tx', 'unauthorized_with_tx'])) {
+        // 🚫 unauthorized_no_tx → أعد المحاولة حتى maxUnauthorized (مطابق لـ Python)
+        //    البايثون: بعد 10 محاولات يُرجع False, "UNAUTHORIZED_PRODUCT"
+        if ($result['status'] === 'unauthorized_no_tx') {
             $unauthorizedCount++;
             $retryCnt++;
-            if ($retryCnt >= 2 && !$delaySent) {
+            if (!$delaySent && $retryCnt === 1) {
                 sendMessage($psid, "جاري إعادة المحاولة قد نتأخر قليلاً... 🕘");
                 $delaySent = true;
             }
@@ -541,13 +492,14 @@ function activate70DZ(string $psid, array $user): void
                 sendMessage($psid, "جاري إعادة المحاولة قد نتأخر قليلاً... 🕘");
                 $delaySent = true;
             }
-            usleep(500000);
+            usleep(($result['status'] === '429') ? 2000000 : 500000);
             continue;
         }
 
         usleep(300000);
     }
 
+    // مطابق لـ Python: بعد انتهاء المحاولات = الشريحة لا تدعم العرض
     sendMessage($psid,
         "عذرا يبدو ان شريحتك لا تدعم هذا العرض \n\n" .
         "⚡ قناة التلقرام : https://t.me/tasjilbott"
@@ -581,6 +533,62 @@ function subscriptionRequest(string $msisdn, string $accessToken, string $jsonPa
     return ['status' => 'retry'];
 }
 
+/**
+ * تحليل محتوى استجابة Djezzy — مطابق لـ parse_response_content في Python
+ * يُعيد: [effectiveMsg, effectiveStatus, fullData, hasTx]
+ */
+function parseResponseContent(array $json): array
+{
+    // ── الحالة 1: message يحتوي على JSON داخلي ──────────────────────────────
+    if (isset($json['message']) && is_string($json['message'])) {
+        $trimmed = trim($json['message']);
+        if (str_starts_with($trimmed, '{') || str_starts_with($trimmed, '[')) {
+            $innerJson = json_decode($json['message'], true);
+            if (is_array($innerJson)) {
+                $status = (string)($innerJson['status'] ?? $innerJson['code'] ?? $json['status'] ?? '');
+                $msg    = $innerJson['message'] ?? $innerJson['ar'] ?? $json['message'] ?? '';
+                $hasTx  = array_key_exists('transaction-id', $innerJson)
+                       || array_key_exists('transactionId',  $innerJson);
+                return [strtolower((string)$msg), $status, $innerJson, $hasTx];
+            }
+        }
+    }
+
+    // ── الحالة 2: status + message مباشرة في JSON الخارجي ──────────────────
+    if (isset($json['status']) || isset($json['message'])) {
+        $status = (string)($json['status'] ?? '');
+        $msg    = $json['message'] ?? '';
+
+        if (str_contains(strtolower((string)$msg), 'unauthorized product')) {
+            $hasTx = array_key_exists('transaction-id', $json)
+                  || array_key_exists('transactionId',  $json);
+            return ['unauthorized product', $status, $json, $hasTx];
+        }
+
+        // message يحتوي على JSON بمفاتيح ar/fr
+        if (is_string($msg) && (str_contains($msg, '"ar"') || str_contains($msg, '"fr"'))) {
+            $inner2 = json_decode($msg, true);
+            if (is_array($inner2)) {
+                $resolvedMsg = $inner2['ar'] ?? $inner2['message'] ?? $msg;
+                return [strtolower((string)$resolvedMsg), $status, $json, false];
+            }
+        }
+
+        $hasTx = array_key_exists('transaction-id', $json)
+              || array_key_exists('transactionId',  $json);
+        return [strtolower((string)$msg), $status, $json, $hasTx];
+    }
+
+    // ── الحالة 3: raw يحتوي على 429 ─────────────────────────────────────────
+    if (isset($json['raw']) && str_contains((string)$json['raw'], '429')) {
+        return ['too many requests', '429', $json, false];
+    }
+
+    $status = (string)($json['status'] ?? $json['code'] ?? 'unknown');
+    $msg    = $json['message'] ?? '';
+    return [strtolower((string)$msg), $status, $json, false];
+}
+
 function activate2GCurl(string $url, string $payload, string $accessToken, string $proxyHost, string $proxyAuth, string $logTag = 'sub'): mixed
 {
     $ch = curl_init($url);
@@ -590,9 +598,11 @@ function activate2GCurl(string $url, string $payload, string $accessToken, strin
         CURLOPT_HTTPHEADER     => [
             'Content-Type: application/json',
             "Authorization: Bearer {$accessToken}",
-            'X-Csrf-Token: ksndcnxlsw',
-            'User-Agent: Dalvik/2.1.0 (Linux; U; Android 6.0; PGN610 Build/MRA58K)',
+            'x-csrf-token: YACIN_DZ',
+            'User-Agent: Djezzy/2.7.0',
             'Connection: Keep-Alive',
+            'Accept: application/json',
+            'Accept-Charset: UTF-8',
             'Accept-Encoding: gzip',
         ],
         CURLOPT_RETURNTRANSFER => true,
@@ -616,92 +626,85 @@ function activate2GCurl(string $url, string $payload, string $accessToken, strin
         date('Y-m-d H:i:s') . " [{$logTag}] CODE:{$httpCode} ERR:{$error} BODY:" . substr((string)$body, 0, 500) . "\n",
         FILE_APPEND);
 
-    // Timeout / Connection error
+    // ── أخطاء الاتصال / Timeout ──────────────────────────────────────────────
     if ($errno || $body === false) return ['status' => 'timeout'];
 
-    // Proxy returned nothing
+    // ── البروكسي لم يُرجع شيئاً ──────────────────────────────────────────────
     if ($httpCode === 0) return 'proxy_error';
 
     $bodyStr = (string)$body;
-    $json    = json_decode($bodyStr, true);
 
-    // ── تحليل الـ JSON الخارجي ──
-    $outerMessage = $json['message']         ?? '';
-    $outerStatus  = (string)($json['status'] ?? $httpCode);
-
-    // ── تحليل الـ JSON المضمّن داخل message (النمط الشائع في Djezzy) ──
-    $innerJson   = null;
-    $innerTxKey  = false;  // هل مفتاح transaction-id موجود أصلاً؟
-    $innerMsg    = '';
-    $innerStatus = '';
-    if (is_string($outerMessage) && str_starts_with(trim($outerMessage), '{')) {
-        $innerJson = json_decode($outerMessage, true);
-        if (is_array($innerJson)) {
-            $innerMsg    = strtolower((string)($innerJson['message'] ?? ''));
-            $innerStatus = (string)($innerJson['status'] ?? '');
-            // المفتاح موجود حتى لو قيمته "null" → يعني "لم يكتمل أسبوع"
-            $innerTxKey  = array_key_exists('transaction-id', $innerJson) || array_key_exists('transactionId', $innerJson);
-        }
+    // ── HTML → البروكسي أعاد صفحة خطأ ───────────────────────────────────────
+    if (stripos($bodyStr, '<!DOCTYPE') !== false || stripos($bodyStr, '<html') !== false) {
+        return 'proxy_error';
     }
 
-    // هل مفتاح transaction-id موجود في الـ JSON الخارجي؟
-    $outerTxKey = array_key_exists('transaction-id', $json ?? []) || array_key_exists('transactionId', $json ?? []);
+    // ── Content-Type JSON أو تحليل مباشر ─────────────────────────────────────
+    $json = json_decode($bodyStr, true);
+    if (!is_array($json)) {
+        return ['status' => 'retry'];
+    }
 
-    // القيم الفعلية (الداخلية تُقدَّم على الخارجية)
-    $effectiveMsg    = $innerJson ? $innerMsg    : strtolower((string)$outerMessage);
-    $effectiveStatus = $innerJson ? $innerStatus : $outerStatus;
-    $rawMessage      = $outerMessage ?: $bodyStr;
-
-    // هل مفتاح transaction-id موجود؟ (حتى لو قيمته "null")
-    $hasTx = $innerJson ? $innerTxKey : $outerTxKey;
+    // ── استخدام parseResponseContent المطابقة للبايثون ───────────────────────
+    [$effectiveMsg, $effectiveStatus, $fullData, $hasTx] = parseResponseContent($json);
 
     file_put_contents('/tmp/activate2g.log',
-        date('Y-m-d H:i:s') . " [{$logTag}] PARSED: effectiveMsg={$effectiveMsg} hasTx=" . ($hasTx?'YES':'NO') . " effectiveStatus={$effectiveStatus}\n",
+        date('Y-m-d H:i:s') . " [{$logTag}] PARSED: msg={$effectiveMsg} status={$effectiveStatus} hasTx=" . ($hasTx ? 'YES' : 'NO') . "\n",
         FILE_APPEND);
 
-    // 🔑 Token expired (401 + invalid credentials)
-    if (str_contains($effectiveMsg, 'invalid credentials') || ($httpCode === 401 && str_contains(strtolower($bodyStr), 'invalid credentials'))) {
-        return ['status' => 'token_expired', 'raw_message' => $rawMessage];
+    // ═══════════════════════════════════════════════════════════════════════════
+    // منطق التحليل — مطابق لـ send_subscription_product1/2_request في Python
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    // 🔑 Token منتهي الصلاحية → invalid credentials فقط
+    if (str_contains($effectiveMsg, 'invalid credentials')
+        || ($httpCode === 401 && str_contains(strtolower($bodyStr), 'invalid credentials'))) {
+        return ['status' => 'token_expired'];
     }
 
-    // 🚫 Unauthorized product — مع transaction-id = لم يكتمل أسبوع
-    //                         — بدون transaction-id = أعد المحاولة
-    if (str_contains($effectiveMsg, 'unauthorized product')) {
-        if ($hasTx) {
-            return ['status' => 'unauthorized_with_tx', 'raw_message' => $rawMessage];
-        }
-        return ['status' => 'unauthorized_no_tx', 'raw_message' => $rawMessage];
+    // 🚫 Unauthorized product → البايثون يُعيد هذا كـ unauthorized للمعالجة في الـ loop
+    //    البايثون لا يُفرّق بين وجود/غياب tx في دالة الـ curl نفسها
+    if (str_contains($effectiveMsg, 'unauthorized product')
+        || ($httpCode === 401 && !str_contains($effectiveMsg, 'invalid credentials'))) {
+        return ['status' => 'unauthorized_no_tx', 'has_tx' => $hasTx];
     }
 
     // ✅ نجاح 200
     if ($httpCode === 200) {
-        $isSuccess = (
-            str_contains($effectiveMsg, 'successfully done') ||
-            str_contains($effectiveMsg, 'giftwalkwin2go') ||
-            str_contains($effectiveMsg, 'btlintspeedday2go')
-        );
-        // استخراج transaction-id إن وجد
-        $effectiveTxId = $innerJson
-            ? ($innerJson['transaction-id'] ?? $innerJson['transactionId'] ?? null)
-            : ($json['transaction-id']      ?? $json['transactionId']      ?? null);
-        if ($isSuccess || $hasTx) {
-            return ['status' => 'success', 'tx' => $effectiveTxId, 'raw_message' => $rawMessage];
+        $isSuccess = str_contains($effectiveMsg, 'successfully done')
+                  || str_contains($effectiveMsg, 'giftwalkwin2go')
+                  || str_contains($effectiveMsg, 'btlintspeedday2go')
+                  || str_contains($effectiveMsg, 'the subscription to the product');
+
+        // استخراج transaction-id من fullData
+        $txId = null;
+        if (is_array($fullData)) {
+            $txId = $fullData['transaction-id'] ?? $fullData['transactionId'] ?? null;
         }
-        return ['status' => 'retry', 'raw_message' => $rawMessage];
+        $hasTxValue = ($txId !== null && $txId !== 'null' && $txId !== '');
+
+        if ($isSuccess && $hasTxValue) {
+            return ['status' => 'success', 'tx' => $txId];
+        }
+        if ($isSuccess) {
+            // البايثون يقبل النجاح حتى بدون tx
+            return ['status' => 'success', 'tx' => null];
+        }
+        return ['status' => 'retry'];
     }
 
     // 💰 رصيد غير كافٍ (402 / 403)
-    if (in_array($httpCode, [402, 403])) {
-        return ['status' => '402', 'raw_message' => $rawMessage];
+    if ($httpCode === 402 || $httpCode === 403) {
+        return ['status' => '402'];
     }
 
     // ⏱️ Too Many Requests
-    if ($httpCode === 429) return ['status' => '429', 'raw_message' => $rawMessage];
+    if ($httpCode === 429) return ['status' => '429'];
 
-    // ⚠️ Server error
-    if ($httpCode === 500) return ['status' => '500', 'raw_message' => $rawMessage];
+    // ⚠️ خطأ السيرفر
+    if ($httpCode === 500) return ['status' => '500'];
 
-    return ['status' => 'retry', 'raw_message' => $rawMessage];
+    return ['status' => 'retry'];
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -848,6 +851,8 @@ function sendWelcome(string $psid): void
 
 function sendMenu(string $psid): void
 {
+    setSession($psid, array_merge(getSession($psid), ['state' => 'menu']));
+
     $payload = json_encode([
         'recipient'      => ['id' => $psid],
         'messaging_type' => 'RESPONSE',
