@@ -1,6 +1,6 @@
 <?php
 
-define('FB_TOKEN',        'EAAFYLlWaXQkBQZCZCXZBVgsvyuSu4byc5ewwZCTaXU5dZAfYrmGdiWFQw8sZAP8fIZASFAsNvxQWVbDSoZAEJsvG1fsfF0fPdwdKaZBwgfXNTRfDZC4oRJ5ZBeLi62c7kl3wfUQ3MGMLcxJJAleKCfvV1luzMcUZAd2vS4MjoLpEkp5AGAABmwf3URgmZAtILsUkFVZCafAMW1BAZDZD');
+define('FB_TOKEN',        'EAAFYLlWaXQkBQ6Lgiv6v5EmrEXnb5QevZBBnlTL6T7EdEQ6i1xiE8eT5rQ7eqU9UlhCwFQDtvGMn4lCcNZBZBrkmJbBmkhZA6iZB6KVTOZB3bZAZBBc2qoEVQQZB0ZA3SnqO7Q0pGhi5dDu3WD0TbVLN5KtjeZCRAbvaElsJEdPHDUkTRajsaUA8dsHqZB10SRim59CgisigmAZDZD');
 define('VERIFY_TOKEN',    'Yacin');
 define('PROXY_LIST_FILE', '/tmp/proxies.json');
 define('PROXY_API_URL',   'https://dev-bendjarayacine.pantheonsite.io/wp-admin/maint/proxy.json');
@@ -171,7 +171,7 @@ function processEvent(string $psid, array $event): void
 
     $msg = $event['message'];
     if (isset($msg['sticker_id']) && $msg['sticker_id'] == 369239263222822) { sendMessage($psid, '👍'); return; }
-    if (isset($msg['attachments']) && empty($msg['text'])) { sendMessage($psid, "🧐"); return; }
+    if (isset($msg['attachments']) && empty($msg['text'])) { sendMessage($psid, "🌙"); return; }
     if (isset($msg['quick_reply']['payload'])) { handlePostback($psid, $msg['quick_reply']['payload']); return; }
 
     $text   = trim($msg['text'] ?? '');
@@ -505,8 +505,8 @@ function activate2G(string $psid, array $user): void
             continue;
         }
 
-        // ── HTTP 402 / 403 — رصيد غير كافٍ ────────────────────────────
-        if ($httpCode === 402 || $httpCode === 403) {
+        // ── HTTP 402 / 403 أو JSON status=402 — رصيد غير كافٍ ─────────
+        if ($httpCode === 402 || $httpCode === 403 || $statusCode === '402') {
             clearPending($psid);
             sendMessage($psid,
                 "عذرا ⚠️ يلزمك الاشتراك في باقة 100da 💰 (عشرة الاف) او اكثر ثم بعدها يمكنك الاستفادة من 2G 🎁 المجانية كل اسبوع طيلة شهر كامل 📆\n\n" .
@@ -628,6 +628,15 @@ function activate70DZ(string $psid, array $user): void
             continue;
         }
 
+        // ── رصيد غير كافٍ — يجب فحصه أولاً قبل أي شيء آخر ─────────────
+        // HTTP 403 + {"status":402,"message":"your balance is not enough..."}
+        // أو HTTP 402 مباشرة
+        if ($httpCode === 402 || $httpCode === 403 || $statusCode === '402') {
+            clearPending($psid);
+            sendMessage($psid, "حدث خطا ⚠️ رصيدك غير كافي 💰 لتفعيل هذا العرض 🔖 😔\n\n⚡ قناة التلقرام : https://t.me/tasjilbott");
+            clearSession($psid); sendMessage($psid, "📱 أرسل رقم هاتفك للبدء من جديد."); return;
+        }
+
         // ── unauthorized product + hasTx=TRUE → أسبوع لم يكتمل ────────
         if (stripos($message, 'unauthorized product') !== false && $hasTransaction) {
             clearPending($psid);
@@ -674,18 +683,6 @@ function activate70DZ(string $psid, array $user): void
             // 200 بدون تأكيد نجاح → أعد المحاولة مثل Python
             usleep(1000000);
             continue;
-        }
-
-        // ── HTTP 402 / 403 ───────────────────────────────────────────────
-        if ($httpCode === 402 || $httpCode === 403) {
-            clearPending($psid);
-            $msgL = strtolower($message);
-            if (str_contains($msgL, 'balance is not enough') || str_contains($msgL, 'payment required') || str_contains($msgL, 'balance')) {
-                sendMessage($psid, "حدث خطا ⚠️ رصيدك غير كافي 💰 لتفعيل هذا العرض 🔖 😔\n\n⚡ قناة التلقرام : https://t.me/tasjilbott");
-            } else {
-                sendMessage($psid, "حدث خطا ⚠️ رصيدك غير كافي 💰 لتفعيل هذا العرض 🔖 😔\n\n⚡ قناة التلقرام : https://t.me/tasjilbott");
-            }
-            clearSession($psid); sendMessage($psid, "📱 أرسل رقم هاتفك للبدء من جديد."); return;
         }
 
         // ── HTTP 429 ─────────────────────────────────────────────────────
