@@ -876,13 +876,15 @@ function loadProxies(): array
 {
     if (file_exists(PROXY_LIST_FILE)) { $d=json_decode(file_get_contents(PROXY_LIST_FILE),true); if(is_array($d)&&$d) return $d; }
     return [
-        "https://change4.owlproxy.com:7778:KrKJ9MTJj380_custom_zone_DZ_st__city_sid_60858024_time_5:2448457",
-        "https://change4.owlproxy.com:7778:KrKJ9MTJj380_custom_zone_DZ_st__city_sid_62593574_time_5:2448457",
-        "https://change4.owlproxy.com:7778:KrKJ9MTJj380_custom_zone_DZ_st__city_sid_73894422_time_5:2448457",
-        "https://change4.owlproxy.com:7778:KrKJ9MTJj380_custom_zone_DZ_st__city_sid_01893864_time_5:2448457",
-        "https://change4.owlproxy.com:7778:KrKJ9MTJj380_custom_zone_DZ_st__city_sid_62580005_time_5:2448457",
-        "https://change4.owlproxy.com:7778:KrKJ9MTJj380_custom_zone_DZ_st__city_sid_55239962_time_5:2448457",
-    ];
+    "https://change4.owlproxy.com:7778:Ur8Jf9Q5oe80_custom_zone_DZ_st__city_sid_69540969_time_5:2464884",
+    "https://change4.owlproxy.com:7778:Ur8Jf9Q5oe80_custom_zone_DZ_st__city_sid_17300521_time_5:2464884",
+    
+    "https://change4.owlproxy.com:7778:9fap6Wjnn550_custom_zone_DZ_st__city_sid_20966754_time_5:2464900",
+    "https://change4.owlproxy.com:7778:9fap6Wjnn550_custom_zone_DZ_st__city_sid_93674129_time_5:2464900",
+    
+    "https://change4.owlproxy.com:7778:F8T8PxheGD60_custom_zone_DZ_st__city_sid_28739257_time_5:2464912",
+    "https://change4.owlproxy.com:7778:F8T8PxheGD60_custom_zone_DZ_st__city_sid_11001738_time_5:2464912",
+];
 }
 
 function refreshProxies(): array
