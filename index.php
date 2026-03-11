@@ -6,11 +6,22 @@ define('PROXY_LIST_FILE', '/tmp/proxies.json');
 define('PROXY_API_URL',   'https://dev-bendjarayacine.pantheonsite.io/wp-admin/maint/proxy.json');
 define('SESSIONS_DIR',    '/tmp/fb_sessions');
 define('USERS_DIR',       '/tmp/fb_users');
-// مؤشر الملف الذي يربط msisdn → user_id (صاحب الرقم)
 define('PHONE_MAP_FILE',  '/tmp/fb_phone_map.json');
+
+// ─── مجلد القفل لمنع التوازي في معالجة رسائل نفس المستخدم ──────────────────
+define('LOCKS_DIR',       '/tmp/fb_locks');
+
+// ─── مجلد تتبع الرسائل المعالجة مسبقاً (Idempotency) ────────────────────────
+define('MSGIDS_DIR',      '/tmp/fb_msgids');
+
+// ─── مجلد تتبع العمليات الجارية ──────────────────────────────────────────────
+define('PENDING_DIR',     '/tmp/fb_pending');
 
 @mkdir(SESSIONS_DIR, 0777, true);
 @mkdir(USERS_DIR,    0777, true);
+@mkdir(LOCKS_DIR,    0777, true);
+@mkdir(MSGIDS_DIR,   0777, true);
+@mkdir(PENDING_DIR,  0777, true);
 
 // ─── Webhook Verification ─────────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
@@ -48,116 +59,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $psid = $event['sender']['id'] ?? null;
             if (!$psid) continue;
 
-            // ── Postback ──────────────────────────────────────────────────
-            if (isset($event['postback'])) {
-                handlePostback($psid, $event['postback']['payload'] ?? '');
+            // ── التحقق من تكرار الرسالة (Idempotency) ────────────────────────
+            $eventId = buildEventId($event);
+            if ($eventId && isMessageProcessed($eventId)) {
+                file_put_contents('/tmp/fb_debug.log',
+                    date('Y-m-d H:i:s') . " [SKIP] رسالة مكررة: {$eventId}\n", FILE_APPEND);
+                continue;
+            }
+            if ($eventId) markMessageProcessed($eventId);
+
+            // ── قفل المستخدم: نمنع التوازي في معالجة رسائله ──────────────────
+            if (!acquireUserLock($psid)) {
+                // المستخدم قيد المعالجة، تجاهل الرسالة الجديدة
+                file_put_contents('/tmp/fb_debug.log',
+                    date('Y-m-d H:i:s') . " [LOCK] تجاهل رسالة {$psid} - قيد المعالجة\n", FILE_APPEND);
                 continue;
             }
 
-            if (!isset($event['message'])) continue;
-            $msg = $event['message'];
-
-            // ── Like sticker ──────────────────────────────────────────────
-            if (isset($msg['sticker_id']) && $msg['sticker_id'] == 369239263222822) {
-                sendMessage($psid, '👍');
-                continue;
+            try {
+                processEvent($psid, $event);
+            } finally {
+                releaseUserLock($psid);
             }
-
-            // ── Attachment بدون نص ────────────────────────────────────────
-            if (isset($msg['attachments']) && empty($msg['text'])) {
-                sendMessage($psid, "🧐");
-                continue;
-            }
-
-            // ── Quick Reply (الأزرار السريعة تأتي كـ message مع quick_reply) ──
-            if (isset($msg['quick_reply']['payload'])) {
-                handlePostback($psid, $msg['quick_reply']['payload']);
-                continue;
-            }
-
-            $text   = trim($msg['text'] ?? '');
-            $digits = preg_replace('/\D/', '', $text);
-
-            if ($text === '') {
-                sendWelcome($psid);
-                continue;
-            }
-
-            // ══════════════════════════════════════════════════════════════
-            // في أي مرحلة: إذا أرسل رقم 07xxxxxxxxx نبدأ من جديد معه
-            // ══════════════════════════════════════════════════════════════
-            if (preg_match('/^07\d{8}$/', $digits)) {
-                handleNewPhone($psid, $digits);
-                continue;
-            }
-
-            // ── أرقام شبكات أخرى ─────────────────────────────────────────
-            if (preg_match('/^05\d{8}$/', $digits)) {
-                sendMessage($psid, "⏳ سيتم إضافة Ooredoo قريباً.");
-                continue;
-            }
-            if (preg_match('/^06\d{8}$/', $digits)) {
-                sendMessage($psid, "❌ لا يوجد تسجيل Mobilis.");
-                continue;
-            }
-
-            // ── قراءة الجلسة ─────────────────────────────────────────────
-            $session = getSession($psid);
-            $state   = $session['state'] ?? 'idle';
-
-            // ── حالة انتظار OTP ───────────────────────────────────────────
-            if ($state === 'awaiting_otp') {
-                if (preg_match('/\b(\d{6})\b/', $text, $m)) {
-                    $otp    = $m[1];
-                    $msisdn = $session['msisdn'];
-                    $result = verifyOTP($msisdn, $otp);
-
-                    if ($result === 'wrong_otp') {
-                        sendMessage($psid, "الرمز المدرج خاطئ ❌ اعد ارسال الرمز الصحيح او اعد ارسال الرقم لطلب رمز جديد 💬");
-                    } elseif ($result === false) {
-                        sendMessage($psid, "❌ حدث خطأ، حاول مجدداً.");
-                    } else {
-                        // احفظ بيانات المستخدم مع الـ msisdn من الجلسة (وليس من أي مكان آخر)
-                        saveUser($psid, [
-                            'user_id'       => $psid,
-                            'msisdn'        => $msisdn,  // من الجلسة الحالية دائماً
-                            'access_token'  => $result['access_token'],
-                            'refresh_token' => $result['refresh_token'],
-                        ]);
-                        savePhoneOwner($msisdn, $psid);
-                        // الجلسة تنتقل لـ menu مع الـ msisdn
-                        setSession($psid, ['state' => 'menu', 'msisdn' => $msisdn]);
-                        sendMessage($psid, "✅ تم تسجيل الدخول بنجاح!");
-                        sendMenu($psid);
-                    }
-                } else {
-                    sendMessage($psid, "⚠️ الرجاء إدخال رمز التحقق المكوّن من 6 أرقام.");
-                }
-                continue;
-            }
-
-            // ── حالة القائمة الرئيسية: الأرقام 1,2,3 ────────────────────
-            if ($state === 'menu') {
-                if ($text === '1') {
-                    handlePostback($psid, 'MENU_2G');
-                } elseif ($text === '2') {
-                    handlePostback($psid, 'MENU_70DZ');
-                } elseif ($text === '3') {
-                    handlePostback($psid, 'MENU_INVITE');
-                } else {
-                    sendMessage($psid, "اختيار خاطئ ❌ قم باستخدام الازرار 
-اذا لم تظهر لك الازرار ارسل 👇
-
-
-✅ لتفعيل 2G الاسبوعية ارسل الرقم | 1
-✅ لتفعيل عرض 70دج_4جيقا 🏷️ ارسل الرقم | 2
-✅ لإرسال دعوة ارسل الرقم | 3");
-                }
-                continue;
-            }
-
-            // ── idle أو حالة غير معروفة ────────────────────────────────
-            sendWelcome($psid);
         }
     }
     exit;
@@ -168,6 +91,218 @@ echo 'OK';
 exit;
 
 // ════════════════════════════════════════════════════════════════════════════
+// IDEMPOTENCY & LOCKING
+// ════════════════════════════════════════════════════════════════════════════
+
+/**
+ * بناء معرّف فريد للحدث
+ */
+function buildEventId(array $event): string
+{
+    if (isset($event['message']['mid'])) {
+        return 'msg_' . $event['message']['mid'];
+    }
+    if (isset($event['postback']['payload'])) {
+        $psid = $event['sender']['id'] ?? 'x';
+        $ts   = $event['timestamp'] ?? time();
+        return 'pb_' . $psid . '_' . $ts . '_' . md5($event['postback']['payload']);
+    }
+    return '';
+}
+
+function isMessageProcessed(string $eventId): bool
+{
+    $f = MSGIDS_DIR . '/' . md5($eventId) . '.done';
+    return file_exists($f);
+}
+
+function markMessageProcessed(string $eventId): void
+{
+    $f = MSGIDS_DIR . '/' . md5($eventId) . '.done';
+    file_put_contents($f, time());
+    // تنظيف الملفات القديمة (أكثر من ساعة)
+    $files = glob(MSGIDS_DIR . '/*.done') ?: [];
+    foreach ($files as $file) {
+        if (time() - filemtime($file) > 3600) @unlink($file);
+    }
+}
+
+/**
+ * قفل المستخدم لمنع معالجة رسالتين في نفس الوقت
+ */
+function acquireUserLock(string $psid): bool
+{
+    $lockFile = LOCKS_DIR . "/{$psid}.lock";
+    $fp = fopen($lockFile, 'c');
+    if (!$fp) return true; // إذا فشل فتح الملف نسمح بالمعالجة
+    $locked = flock($fp, LOCK_EX | LOCK_NB);
+    if ($locked) {
+        // احفظ مرجع الملف لتحريره لاحقاً
+        $GLOBALS['_user_lock_fps'][$psid] = $fp;
+        return true;
+    }
+    fclose($fp);
+    return false;
+}
+
+function releaseUserLock(string $psid): void
+{
+    if (isset($GLOBALS['_user_lock_fps'][$psid])) {
+        $fp = $GLOBALS['_user_lock_fps'][$psid];
+        flock($fp, LOCK_UN);
+        fclose($fp);
+        unset($GLOBALS['_user_lock_fps'][$psid]);
+    }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// PENDING OPERATIONS (العمليات المعلقة)
+// ════════════════════════════════════════════════════════════════════════════
+
+function setPendingOperation(string $psid, string $operation): void
+{
+    file_put_contents(PENDING_DIR . "/{$psid}.json", json_encode([
+        'operation' => $operation,
+        'started'   => time(),
+    ]));
+}
+
+function clearPendingOperation(string $psid): void
+{
+    $f = PENDING_DIR . "/{$psid}.json";
+    if (file_exists($f)) @unlink($f);
+}
+
+function getPendingOperation(string $psid): ?string
+{
+    $f = PENDING_DIR . "/{$psid}.json";
+    if (!file_exists($f)) return null;
+    $data = json_decode(file_get_contents($f), true);
+    if (!$data) return null;
+    // إذا مضت أكثر من 5 دقائق على العملية نعتبرها منتهية
+    if (time() - ($data['started'] ?? 0) > 300) {
+        @unlink($f);
+        return null;
+    }
+    return $data['operation'] ?? null;
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// MAIN EVENT PROCESSOR
+// ════════════════════════════════════════════════════════════════════════════
+
+function processEvent(string $psid, array $event): void
+{
+    // ── Postback ──────────────────────────────────────────────────────────
+    if (isset($event['postback'])) {
+        handlePostback($psid, $event['postback']['payload'] ?? '');
+        return;
+    }
+
+    if (!isset($event['message'])) return;
+    $msg = $event['message'];
+
+    // ── Like sticker ──────────────────────────────────────────────────────
+    if (isset($msg['sticker_id']) && $msg['sticker_id'] == 369239263222822) {
+        sendMessage($psid, '👍');
+        return;
+    }
+
+    // ── Attachment بدون نص ────────────────────────────────────────────────
+    if (isset($msg['attachments']) && empty($msg['text'])) {
+        sendMessage($psid, "🧐");
+        return;
+    }
+
+    // ── Quick Reply ───────────────────────────────────────────────────────
+    if (isset($msg['quick_reply']['payload'])) {
+        handlePostback($psid, $msg['quick_reply']['payload']);
+        return;
+    }
+
+    $text   = trim($msg['text'] ?? '');
+    $digits = preg_replace('/\D/', '', $text);
+
+    if ($text === '') {
+        sendWelcome($psid);
+        return;
+    }
+
+    // ── التحقق من وجود عملية معلقة ───────────────────────────────────────
+    $pendingOp = getPendingOperation($psid);
+    if ($pendingOp !== null) {
+        sendMessage($psid, "⏳ انتظر، نحن نقوم بـ {$pendingOp}، بعدها يمكنك الطلب.");
+        return;
+    }
+
+    // ── رقم جيزي 07xxxxxxxxx ─────────────────────────────────────────────
+    if (preg_match('/^07\d{8}$/', $digits)) {
+        handleNewPhone($psid, $digits);
+        return;
+    }
+
+    // ── أرقام شبكات أخرى ─────────────────────────────────────────────────
+    if (preg_match('/^05\d{8}$/', $digits)) {
+        sendMessage($psid, "⏳ سيتم إضافة Ooredoo قريباً.");
+        return;
+    }
+    if (preg_match('/^06\d{8}$/', $digits)) {
+        sendMessage($psid, "❌ لا يوجد تسجيل Mobilis.");
+        return;
+    }
+
+    // ── قراءة الجلسة ─────────────────────────────────────────────────────
+    $session = getSession($psid);
+    $state   = $session['state'] ?? 'idle';
+
+    // ── حالة انتظار OTP ───────────────────────────────────────────────────
+    if ($state === 'awaiting_otp') {
+        if (preg_match('/\b(\d{6})\b/', $text, $m)) {
+            $otp    = $m[1];
+            $msisdn = $session['msisdn'];
+            $result = verifyOTP($msisdn, $otp);
+
+            if ($result === 'wrong_otp') {
+                sendMessage($psid, "الرمز المدرج خاطئ ❌ اعد ارسال الرمز الصحيح او اعد ارسال الرقم لطلب رمز جديد 💬");
+            } elseif ($result === false) {
+                sendMessage($psid, "❌ حدث خطأ، حاول مجدداً.");
+            } else {
+                saveUser($psid, [
+                    'user_id'       => $psid,
+                    'msisdn'        => $msisdn,
+                    'access_token'  => $result['access_token'],
+                    'refresh_token' => $result['refresh_token'],
+                ]);
+                savePhoneOwner($msisdn, $psid);
+                setSession($psid, ['state' => 'menu', 'msisdn' => $msisdn]);
+                sendMessage($psid, "✅ تم تسجيل الدخول بنجاح!");
+                sendMenu($psid);
+            }
+        } else {
+            sendMessage($psid, "⚠️ الرجاء إدخال رمز التحقق المكوّن من 6 أرقام.");
+        }
+        return;
+    }
+
+    // ── حالة القائمة الرئيسية ─────────────────────────────────────────────
+    if ($state === 'menu') {
+        if ($text === '1') {
+            handlePostback($psid, 'MENU_2G');
+        } elseif ($text === '2') {
+            handlePostback($psid, 'MENU_70DZ');
+        } elseif ($text === '3') {
+            handlePostback($psid, 'MENU_INVITE');
+        } else {
+            sendMessage($psid, "اختيار خاطئ ❌ قم باستخدام الازرار \nاذا لم تظهر لك الازرار ارسل 👇\n\n\n✅ لتفعيل 2G الاسبوعية ارسل الرقم | 1\n✅ لتفعيل عرض 70دج_4جيقا 🏷️ ارسل الرقم | 2\n✅ لإرسال دعوة ارسل الرقم | 3");
+        }
+        return;
+    }
+
+    // ── idle أو حالة غير معروفة ───────────────────────────────────────────
+    sendWelcome($psid);
+}
+
+// ════════════════════════════════════════════════════════════════════════════
 // PHONE HANDLING
 // ════════════════════════════════════════════════════════════════════════════
 
@@ -176,11 +311,9 @@ function handleNewPhone(string $psid, string $phone): void
     $msisdn = '213' . substr($phone, 1);
     $owner  = getPhoneOwner($msisdn);
 
-    // الرقم مسجّل لنفس المستخدم → حدّث التوكن وأعد إلى القائمة بالرقم الجديد
     if ($owner !== null && $owner === $psid) {
         $user = getUser($psid);
         if ($user && !empty($user['access_token']) && !empty($user['refresh_token'])) {
-            // تحديث msisdn دائماً بالرقم الجديد المُرسَل
             $user['msisdn'] = $msisdn;
             saveUser($psid, $user);
 
@@ -191,26 +324,22 @@ function handleNewPhone(string $psid, string $phone): void
                     'access_token'  => $refreshed['access_token'],
                     'refresh_token' => $refreshed['refresh_token'],
                 ]));
-                // الجلسة تحمل الرقم الجديد
                 setSession($psid, ['state' => 'menu', 'msisdn' => $msisdn]);
                 sendMessage($psid, "✅ تم التعرف على رقمك بنجاح!");
                 sendMenu($psid);
             } else {
-                // فشل تحديث التوكن → اطلب OTP جديداً
                 sendOTPAndWait($psid, $msisdn, $phone);
             }
             return;
         }
     }
 
-    // الرقم مسجّل لمستخدم آخر → إثبات الهوية بـ OTP
     if ($owner !== null && $owner !== $psid) {
         sendMessage($psid, "🚫 أنت لست صاحب الرقم، يجب إثبات الهوية.\n\n📲 سيتم إرسال رمز تحقق إلى هذا الرقم...");
         sendOTPAndWait($psid, $msisdn, $phone);
         return;
     }
 
-    // رقم جديد غير مسجّل
     sendOTPAndWait($psid, $msisdn, $phone);
 }
 
@@ -237,32 +366,27 @@ function handlePostback(string $psid, string $payload): void
             break;
 
         case 'MENU_2G':
-            $sess2g = getSession($psid);
-            $user2g = getUser($psid);
-            if (!$user2g || empty($user2g['access_token'])) {
+            $sess = getSession($psid);
+            $user = getUser($psid);
+            if (!$user || empty($user['access_token'])) {
                 sendMessage($psid, "⚠️ يجب تسجيل الدخول أولاً، أرسل رقم هاتفك.");
                 return;
             }
-            // تأكد أن msisdn في user مطابق لما في الجلسة
-            if (!empty($sess2g['msisdn'])) {
-                $user2g['msisdn'] = $sess2g['msisdn'];
-            }
-            setSession($psid, array_merge($sess2g, ['state' => 'menu']));
-            activate2G($psid, $user2g);
+            if (!empty($sess['msisdn'])) $user['msisdn'] = $sess['msisdn'];
+            setSession($psid, array_merge($sess, ['state' => 'menu']));
+            activate2G($psid, $user);
             break;
 
         case 'MENU_70DZ':
-            $sess70 = getSession($psid);
-            $user70 = getUser($psid);
-            if (!$user70 || empty($user70['access_token'])) {
+            $sess = getSession($psid);
+            $user = getUser($psid);
+            if (!$user || empty($user['access_token'])) {
                 sendMessage($psid, "⚠️ يجب تسجيل الدخول أولاً، أرسل رقم هاتفك.");
                 return;
             }
-            if (!empty($sess70['msisdn'])) {
-                $user70['msisdn'] = $sess70['msisdn'];
-            }
-            setSession($psid, array_merge($sess70, ['state' => 'menu']));
-            activate70DZ($psid, $user70);
+            if (!empty($sess['msisdn'])) $user['msisdn'] = $sess['msisdn'];
+            setSession($psid, array_merge($sess, ['state' => 'menu']));
+            activate70DZ($psid, $user);
             break;
 
         case 'MENU_INVITE':
@@ -291,6 +415,8 @@ function activate2G(string $psid, array $user): void
     $retryCnt          = 0;
     $delaySent         = false;
 
+    // ── تسجيل العملية المعلقة ────────────────────────────────────────────
+    setPendingOperation($psid, 'تفعيل 2G 🎁');
     sendMessage($psid, "جاري تفعيل 2G 🎁 🔄...");
 
     for ($i = 0; $i < $maxRetries; $i++) {
@@ -309,6 +435,7 @@ function activate2G(string $psid, array $user): void
 
         // ✅ نجاح
         if ($result['status'] === 'success') {
+            clearPendingOperation($psid);
             sendMessage($psid,
                 "⭐ تم تفعيل 2G بنجاح 🎁 للرقم {$displayMasked}\n" .
                 "لا تنسى متابعة حساب المطور </>\nhttps://www.facebook.com/Bendjara.Yacin\n\n" .
@@ -321,6 +448,7 @@ function activate2G(string $psid, array $user): void
 
         // 💰 رصيد غير كافٍ
         if ($result['status'] === '402') {
+            clearPendingOperation($psid);
             sendMessage($psid,
                 "عذرا ⚠️ يلزمك الاشتراك في باقة 100da 💰 (عشرة الاف) او اكثر ثم بعدها يمكنك الاستفادة من 2G 🎁 المجانية كل اسبوع طيلة شهر كامل 📆\n\n" .
                 "🔴 ملاحظة 1️⃣: هذا التحديث من المتعامل جيزي ولا يمكن تجاوزه ⚠️\n" .
@@ -335,14 +463,18 @@ function activate2G(string $psid, array $user): void
         // 🔑 التوكن منتهي
         if ($result['status'] === 'token_expired') {
             if ($tokenRefreshCount >= $maxTokenRefresh) {
+                clearPendingOperation($psid);
                 sendMessage($psid, "فشل تحديث الجلسة بعد عدة محاولات، الرجاء إعادة ارسال رقمك للتسجيل من جديد");
                 clearSession($psid);
                 return;
             }
             $tokenRefreshCount++;
-            sendMessage($psid, "تم تحديث الجلسة، جاري إعادة المحاولة...");
             $refreshed = refreshAccessToken($refreshToken, $msisdn, $psid);
-            if ($refreshed === false) { clearSession($psid); return; }
+            if ($refreshed === false) {
+                clearPendingOperation($psid);
+                clearSession($psid);
+                return;
+            }
             $accessToken  = $refreshed['access_token'];
             $refreshToken = $refreshed['refresh_token'];
             saveUser($psid, array_merge($user, [
@@ -352,8 +484,9 @@ function activate2G(string $psid, array $user): void
             continue;
         }
 
-        // 🚫 unauthorized_with_tx → لم يكتمل أسبوع (transaction-id موجود)
+        // 🚫 unauthorized_with_tx → لم يكتمل أسبوع
         if ($result['status'] === 'unauthorized_with_tx') {
+            clearPendingOperation($psid);
             sendMessage($psid,
                 "عذرا 😬 لم تكمل اسبوع ⚠️ اكمل اسبوع و اعد المحاولة مجددا 📆\n\n" .
                 "⚡ قناة التلقرام : https://t.me/tasjilbott"
@@ -363,10 +496,9 @@ function activate2G(string $psid, array $user): void
             return;
         }
 
-        // 🔄 unauthorized_no_tx → أعد المحاولة (بدون transaction-id)
+        // 🔄 unauthorized_no_tx → أعد المحاولة
         if ($result['status'] === 'unauthorized_no_tx') {
             $retryCnt++;
-            // بعد محاولتين → أخبر المستخدم بالتأخير (مرة واحدة فقط)
             if ($retryCnt >= 2 && !$delaySent) {
                 sendMessage($psid, "نواجه مشاكل في التفعيل . جاري اعادة المحاولة ... تستغرق اقل من 3 دقائق 🕘");
                 $delaySent = true;
@@ -389,6 +521,7 @@ function activate2G(string $psid, array $user): void
         usleep(300000);
     }
 
+    clearPendingOperation($psid);
     sendMessage($psid,
         "هناك اشكال في سيرفر جيزي ⚠️ لم نستطع التفعيل لرقمك \n\n" .
         "⚡ قناة التلقرام : https://t.me/tasjilbott"
@@ -416,6 +549,8 @@ function activate70DZ(string $psid, array $user): void
     $retryCnt          = 0;
     $delaySent         = false;
 
+    // ── تسجيل العملية المعلقة ────────────────────────────────────────────
+    setPendingOperation($psid, 'تفعيل عرض 70دج 🔖');
     sendMessage($psid, "جاري تفعيل العرض 🔖 🔄...");
 
     for ($i = 0; $i < $maxRetries; $i++) {
@@ -428,6 +563,7 @@ function activate70DZ(string $psid, array $user): void
 
         // ✅ نجاح
         if ($result['status'] === 'success') {
+            clearPendingOperation($psid);
             sendMessage($psid,
                 "⭐ تم تفعيل العرض بنجاح 🎁 للرقم {$displayMasked}\n" .
                 "✅ اسم العرض: IMTIYAZ 70 🏷️\n" .
@@ -443,6 +579,7 @@ function activate70DZ(string $psid, array $user): void
 
         // 💰 رصيد غير كافٍ
         if ($result['status'] === '402') {
+            clearPendingOperation($psid);
             sendMessage($psid,
                 "حدث خطا ⚠️ رصيدك غير كافي 💰 لتفعيل هذا العرض 🔖 😔\n\n" .
                 "⚡ قناة التلقرام : https://t.me/tasjilbott"
@@ -455,14 +592,18 @@ function activate70DZ(string $psid, array $user): void
         // 🔑 التوكن منتهي
         if ($result['status'] === 'token_expired') {
             if ($tokenRefreshCount >= $maxTokenRefresh) {
+                clearPendingOperation($psid);
                 sendMessage($psid, "فشل تحديث الجلسة بعد عدة محاولات، الرجاء إعادة ارسال رقمك للتسجيل من جديد");
                 clearSession($psid);
                 return;
             }
             $tokenRefreshCount++;
-            sendMessage($psid, "تم تحديث الجلسة، جاري إعادة المحاولة...");
             $refreshed = refreshAccessToken($refreshToken, $msisdn, $psid);
-            if ($refreshed === false) { clearSession($psid); return; }
+            if ($refreshed === false) {
+                clearPendingOperation($psid);
+                clearSession($psid);
+                return;
+            }
             $accessToken       = $refreshed['access_token'];
             $refreshToken      = $refreshed['refresh_token'];
             $unauthorizedCount = 0;
@@ -473,7 +614,7 @@ function activate70DZ(string $psid, array $user): void
             continue;
         }
 
-        // 🚫 unauthorized_no_tx / unauthorized_with_tx → أعد المحاولة حتى maxUnauthorized
+        // 🚫 unauthorized → أعد المحاولة حتى maxUnauthorized
         if (in_array($result['status'], ['unauthorized_no_tx', 'unauthorized_with_tx'])) {
             $unauthorizedCount++;
             $retryCnt++;
@@ -482,6 +623,7 @@ function activate70DZ(string $psid, array $user): void
                 $delaySent = true;
             }
             if ($unauthorizedCount >= $maxUnauthorized) {
+                clearPendingOperation($psid);
                 sendMessage($psid,
                     "هناك اشكال في سيرفر جيزي ⚠️ لم نستطع التفعيل لرقمك \n\n" .
                     "⚡ قناة التلقرام : https://t.me/tasjilbott"
@@ -508,6 +650,7 @@ function activate70DZ(string $psid, array $user): void
         usleep(300000);
     }
 
+    clearPendingOperation($psid);
     sendMessage($psid,
         "عذرا يبدو ان شريحتك لا تدعم هذا العرض \n\n" .
         "⚡ قناة التلقرام : https://t.me/tasjilbott"
@@ -517,7 +660,7 @@ function activate70DZ(string $psid, array $user): void
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// SHARED SUBSCRIPTION REQUEST (يُستخدم لكلا العرضين)
+// SHARED SUBSCRIPTION REQUEST
 // ════════════════════════════════════════════════════════════════════════════
 
 function subscriptionRequest(string $msisdn, string $accessToken, string $jsonPayload, string $logTag): array
@@ -539,6 +682,46 @@ function subscriptionRequest(string $msisdn, string $accessToken, string $jsonPa
     }
 
     return ['status' => 'retry'];
+}
+
+/**
+ * تحليل الاستجابة بنفس منطق Python parse_response_content
+ */
+function parseResponseContent(array $json, int $httpCode, string $bodyStr): array
+{
+    $outerMessage = $json['message']         ?? '';
+    $outerStatus  = (string)($json['status'] ?? $httpCode);
+
+    // ── تحليل JSON داخلي في message ──────────────────────────────────────
+    $innerJson   = null;
+    $innerTxKey  = false;
+    $innerMsg    = '';
+    $innerStatus = '';
+
+    if (is_string($outerMessage) && str_starts_with(trim($outerMessage), '{')) {
+        $innerJson = json_decode($outerMessage, true);
+        if (is_array($innerJson)) {
+            $innerMsg    = strtolower((string)($innerJson['message'] ?? ''));
+            $innerStatus = (string)($innerJson['status'] ?? '');
+            $innerTxKey  = array_key_exists('transaction-id', $innerJson)
+                        || array_key_exists('transactionId', $innerJson);
+        }
+    }
+
+    $outerTxKey = array_key_exists('transaction-id', $json)
+               || array_key_exists('transactionId', $json);
+
+    $effectiveMsg    = $innerJson ? $innerMsg    : strtolower((string)$outerMessage);
+    $effectiveStatus = $innerJson ? $innerStatus : $outerStatus;
+    $hasTx           = $innerJson ? $innerTxKey  : $outerTxKey;
+    $rawMessage      = $outerMessage ?: $bodyStr;
+
+    return [
+        'effectiveMsg'    => $effectiveMsg,
+        'effectiveStatus' => $effectiveStatus,
+        'hasTx'           => $hasTx,
+        'rawMessage'      => $rawMessage,
+    ];
 }
 
 function activate2GCurl(string $url, string $payload, string $accessToken, string $proxyHost, string $proxyAuth, string $logTag = 'sub'): mixed
@@ -576,85 +759,52 @@ function activate2GCurl(string $url, string $payload, string $accessToken, strin
         date('Y-m-d H:i:s') . " [{$logTag}] CODE:{$httpCode} ERR:{$error} BODY:" . substr((string)$body, 0, 500) . "\n",
         FILE_APPEND);
 
-    // Timeout / Connection error
     if ($errno || $body === false) return ['status' => 'timeout'];
-
-    // Proxy returned nothing
-    if ($httpCode === 0) return 'proxy_error';
+    if ($httpCode === 0)           return 'proxy_error';
 
     $bodyStr = (string)$body;
     $json    = json_decode($bodyStr, true);
+    if (!is_array($json)) return ['status' => 'retry'];
 
-    // ── تحليل الـ JSON الخارجي ──
-    $outerMessage = $json['message']         ?? '';
-    $outerStatus  = (string)($json['status'] ?? $httpCode);
-
-    // ── تحليل الـ JSON المضمّن داخل message (النمط الشائع في Djezzy) ──
-    $innerJson   = null;
-    $innerTxKey  = false;  // هل مفتاح transaction-id موجود أصلاً؟
-    $innerMsg    = '';
-    $innerStatus = '';
-    if (is_string($outerMessage) && str_starts_with(trim($outerMessage), '{')) {
-        $innerJson = json_decode($outerMessage, true);
-        if (is_array($innerJson)) {
-            $innerMsg    = strtolower((string)($innerJson['message'] ?? ''));
-            $innerStatus = (string)($innerJson['status'] ?? '');
-            // المفتاح موجود حتى لو قيمته "null" → يعني "لم يكتمل أسبوع"
-            $innerTxKey  = array_key_exists('transaction-id', $innerJson) || array_key_exists('transactionId', $innerJson);
-        }
-    }
-
-    // هل مفتاح transaction-id موجود في الـ JSON الخارجي؟
-    $outerTxKey = array_key_exists('transaction-id', $json ?? []) || array_key_exists('transactionId', $json ?? []);
-
-    // القيم الفعلية (الداخلية تُقدَّم على الخارجية)
-    $effectiveMsg    = $innerJson ? $innerMsg    : strtolower((string)$outerMessage);
-    $effectiveStatus = $innerJson ? $innerStatus : $outerStatus;
-    $rawMessage      = $outerMessage ?: $bodyStr;
-
-    // هل مفتاح transaction-id موجود؟ (حتى لو قيمته "null")
-    $hasTx = $innerJson ? $innerTxKey : $outerTxKey;
+    $parsed       = parseResponseContent($json, $httpCode, $bodyStr);
+    $effectiveMsg = $parsed['effectiveMsg'];
+    $hasTx        = $parsed['hasTx'];
+    $rawMessage   = $parsed['rawMessage'];
 
     file_put_contents('/tmp/activate2g.log',
-        date('Y-m-d H:i:s') . " [{$logTag}] PARSED: effectiveMsg={$effectiveMsg} hasTx=" . ($hasTx?'YES':'NO') . " effectiveStatus={$effectiveStatus}\n",
+        date('Y-m-d H:i:s') . " [{$logTag}] PARSED: msg={$effectiveMsg} hasTx=" . ($hasTx?'YES':'NO') . "\n",
         FILE_APPEND);
 
-    // 🔑 Token expired (401 + invalid credentials)
-    if (str_contains($effectiveMsg, 'invalid credentials') || ($httpCode === 401 && str_contains(strtolower($bodyStr), 'invalid credentials'))) {
+    // 🔑 Token expired
+    if (str_contains($effectiveMsg, 'invalid credentials') ||
+        ($httpCode === 401 && str_contains(strtolower($bodyStr), 'invalid credentials'))) {
         return ['status' => 'token_expired', 'raw_message' => $rawMessage];
     }
 
-    // 🚫 Unauthorized product — مع transaction-id = لم يكتمل أسبوع
-    //                         — بدون transaction-id = أعد المحاولة
+    // 🚫 Unauthorized product
     if (str_contains($effectiveMsg, 'unauthorized product')) {
-        if ($hasTx) {
-            return ['status' => 'unauthorized_with_tx', 'raw_message' => $rawMessage];
-        }
-        return ['status' => 'unauthorized_no_tx', 'raw_message' => $rawMessage];
+        return $hasTx
+            ? ['status' => 'unauthorized_with_tx', 'raw_message' => $rawMessage]
+            : ['status' => 'unauthorized_no_tx',   'raw_message' => $rawMessage];
     }
 
     // ✅ نجاح 200
     if ($httpCode === 200) {
-        $isSuccess = (
-            str_contains($effectiveMsg, 'successfully done') ||
-            str_contains($effectiveMsg, 'giftwalkwin2go') ||
-            str_contains($effectiveMsg, 'btlintspeedday2go')
-        );
+        $isSuccess = str_contains($effectiveMsg, 'successfully done')
+                  || str_contains($effectiveMsg, 'giftwalkwin2go')
+                  || str_contains($effectiveMsg, 'btlintspeedday2go');
         if ($isSuccess || $hasTx) {
-            return ['status' => 'success', 'tx' => $effectiveTxId, 'raw_message' => $rawMessage];
+            return ['status' => 'success', 'raw_message' => $rawMessage];
         }
         return ['status' => 'retry', 'raw_message' => $rawMessage];
     }
 
-    // 💰 رصيد غير كافٍ (402 / 403)
+    // 💰 رصيد غير كافٍ
     if (in_array($httpCode, [402, 403])) {
         return ['status' => '402', 'raw_message' => $rawMessage];
     }
 
-    // ⏱️ Too Many Requests
     if ($httpCode === 429) return ['status' => '429', 'raw_message' => $rawMessage];
-
-    // ⚠️ Server error
     if ($httpCode === 500) return ['status' => '500', 'raw_message' => $rawMessage];
 
     return ['status' => 'retry', 'raw_message' => $rawMessage];
@@ -664,25 +814,20 @@ function activate2GCurl(string $url, string $payload, string $accessToken, strin
 // REFRESH TOKEN
 // ════════════════════════════════════════════════════════════════════════════
 
-/**
- * تحديث التوكن. إذا انتهى الـ refresh token يرسل OTP تلقائياً.
- * يُعيد ['access_token'=>..., 'refresh_token'=>...] أو false
- */
 function refreshAccessToken(string $refreshToken, string $msisdn, string $psid): mixed
 {
-    $proxies = loadProxies();
-    $allProxies = array_merge($proxies, []);
-
+    $proxies    = loadProxies();
+    $allProxies = $proxies;
     $maxRetries = 20;
+
     for ($i = 0; $i < $maxRetries; $i++) {
-        $proxy = $allProxies[$i % count($allProxies)];
-        $pp    = parseProxy($proxy);
+        $proxy  = $allProxies[$i % count($allProxies)];
+        $pp     = parseProxy($proxy);
         $result = refreshTokenRequest($refreshToken, $pp['host'], $pp['userpass']);
 
         if ($result === 'expired') {
-            // refresh token منتهي → أرسل OTP من جديد
             sendMessage($psid, "🔄 انتهت صلاحية الجلسة، سيتم إرسال رمز تحقق جديد...");
-            $phone = '0' . substr($msisdn, 3); // 213... → 07...
+            $phone = '0' . substr($msisdn, 3);
             sendOTPAndWait($psid, $msisdn, $phone);
             return false;
         }
@@ -695,7 +840,6 @@ function refreshAccessToken(string $refreshToken, string $msisdn, string $psid):
             continue;
         }
 
-        // نجح التحديث
         saveUser($psid, array_merge(getUser($psid) ?? [], [
             'access_token'  => $result['access_token'],
             'refresh_token' => $result['refresh_token'],
@@ -716,24 +860,18 @@ function refreshTokenRequest(string $refreshToken, string $proxyHost, string $pr
     ]);
 
     $result = djezzyCurl('https://apim.djezzy.dz/oauth2/token', $postData, $proxyHost, $proxyAuth, 'refresh');
-
     if ($result === 'html' || $result === false) return $result;
 
     $code = $result['code'];
     $json = json_decode($result['body'], true);
 
-    // Refresh token منتهي
-    if ($code === 400 && isset($json['error']) && $json['error'] === 'invalid_grant') {
-        return 'expired';
-    }
-
+    if ($code === 400 && isset($json['error']) && $json['error'] === 'invalid_grant') return 'expired';
     if ($code === 200 && isset($json['access_token'])) {
         return [
             'access_token'  => $json['access_token'],
             'refresh_token' => $json['refresh_token'] ?? $refreshToken,
         ];
     }
-
     return false;
 }
 
@@ -910,9 +1048,6 @@ function sendDjezzyOTP(string $msisdn): bool
     foreach ($proxies as $p) {
         $pp = parseProxy($p);
         $r  = djezzyCurl('https://apim.djezzy.dz/oauth2/registration',
-            http_build_query(['scope' => 'smsotp', 'client_id' => '6E6CwTkp8H1CyQxraPmcEJPQ7xka', 'msisdn' => $msisdn]),
-            $pp['host'], $pp['userpass'], 'registration');
-        if ($r === 'html') $r = djezzyCurl('https://apim.djezzy.dz/oauth2/registration',
             http_build_query(['scope' => 'smsotp', 'client_id' => '6E6CwTkp8H1CyQxraPmcEJPQ7xka', 'msisdn' => $msisdn]),
             $pp['host'], $pp['userpass'], 'registration');
         if ($r === true) return true;
