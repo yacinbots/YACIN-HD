@@ -171,7 +171,7 @@ function processEvent(string $psid, array $event): void
 
     $msg = $event['message'];
     if (isset($msg['sticker_id']) && $msg['sticker_id'] == 369239263222822) { sendMessage($psid, '👍'); return; }
-    if (isset($msg['attachments']) && empty($msg['text'])) { sendMessage($psid, "🌙"); return; }
+    if (isset($msg['attachments']) && empty($msg['text'])) { sendMessage($psid, "🧐"); return; }
     if (isset($msg['quick_reply']['payload'])) { handlePostback($psid, $msg['quick_reply']['payload']); return; }
 
     $text   = trim($msg['text'] ?? '');
@@ -319,29 +319,29 @@ function handlePostback(string $psid, string $payload): void
 function parseResponseContent(array $responseData): array
 {
     // ── Case 1: message field contains nested JSON ────────────────────────
+    // HTTP 200 + inner JSON يحتوي transaction-id (حتى لو قيمته "null") = hasTx TRUE
+    // مثال: {"object":"OK","status":200,"message":"{\"status\":\"401\",\"message\":\"unauthorized product\",\"transaction-id\":\"null\"}"}
+    // → hasTx=TRUE → يعني "لم تكمل أسبوع"
     if (isset($responseData['message']) && is_string($responseData['message'])) {
         $inner = @json_decode($responseData['message'], true);
         if (is_array($inner)) {
             $status  = (string)($inner['status'] ?? $inner['code'] ?? $responseData['status'] ?? 'unknown');
-            $message = $inner['message'] ?? $inner['ar'] ?? $responseData['message'];
-            $txId    = $inner['transaction-id'] ?? null;
-            $hasTx   = ($txId !== null);
-            return [$status, (string)$message, $inner, $hasTx];
+            $message = (string)($inner['message'] ?? $inner['ar'] ?? $responseData['message']);
+            // المفتاح موجود حتى لو قيمته "null" → hasTx = true
+            $hasTx   = array_key_exists('transaction-id', $inner);
+            return [$status, $message, $inner, $hasTx];
         }
     }
 
-    // ── Case 2: top-level status + message ───────────────────────────────
+    // ── Case 2: top-level status + message (بدون JSON داخلي) ─────────────
+    // HTTP 401 + {"status":401,"message":"unauthorized product"} (بدون transaction-id)
+    // → hasTx = FALSE → أعد المحاولة فقط، لا تُرسل "لم تكمل أسبوع"
     if (isset($responseData['status']) && isset($responseData['message'])) {
         $status  = (string)$responseData['status'];
-        $message = $responseData['message'];
-
-        // "unauthorized product" في الرسالة مباشرة
-        if (stripos((string)$message, 'unauthorized product') !== false) {
-            return ['401', 'unauthorized product', $responseData, true];
-        }
+        $message = (string)$responseData['message'];
 
         // message نفسها JSON يحتوي ar أو fr
-        if (is_string($message) && (str_starts_with(trim($message), '{') || str_contains($message, '"ar"') || str_contains($message, '"fr"'))) {
+        if (str_starts_with(trim($message), '{') || str_contains($message, '"ar"') || str_contains($message, '"fr"')) {
             $inner2 = @json_decode($message, true);
             if (is_array($inner2)) {
                 if (isset($inner2['ar'])) return [$status, (string)$inner2['ar'], $responseData, false];
@@ -349,7 +349,8 @@ function parseResponseContent(array $responseData): array
             }
         }
 
-        return [$status, (string)$message, $responseData, false];
+        // hasTx = false دائماً هنا (لا يوجد transaction-id في المستوى الأعلى)
+        return [$status, $message, $responseData, false];
     }
 
     // ── Case 3: body field ────────────────────────────────────────────────
@@ -439,19 +440,31 @@ function activate2G(string $psid, array $user): void
             continue;
         }
 
-        // ── unauthorized product → إعادة المحاولة (مثل Python) ──────────
-        if (stripos($message, 'unauthorized product') !== false
-            || ($statusCode === '401' && $hasTransaction)) {
+        // ── unauthorized product + hasTx=TRUE → انتهى الأسبوع (200 + inner JSON + transaction-id) ──
+        // مثال: HTTP 200 + inner {"status":"401","message":"unauthorized product","transaction-id":"null"}
+        if (stripos($message, 'unauthorized product') !== false && $hasTransaction) {
+            clearPending($psid);
+            sendMessage($psid,
+                "عذرا 😬 لم تكمل اسبوع ⚠️ اكمل اسبوع و اعد المحاولة مجددا 📆\n\n" .
+                "⚡ قناة التلقرام : https://t.me/tasjilbott"
+            );
+            clearSession($psid);
+            sendMessage($psid, "📱 أرسل رقم هاتفك للبدء من جديد.");
+            return;
+        }
 
+        // ── unauthorized product + hasTx=FALSE → أعد المحاولة ──────────
+        // مثال: HTTP 401 + {"status":401,"message":"unauthorized product"} (بدون transaction-id)
+        if (stripos($message, 'unauthorized product') !== false && !$hasTransaction) {
             if (!$unauthorizedDetected && $attempt === 1) {
                 sendMessage($psid, "نواجه مشاكل في التفعيل . جاري اعادة المحاولة ... تستغرق اقل من 3 دقائق 🕘");
                 $unauthorizedDetected = true;
             }
             if ($attempt < $maxAttempts) { usleep(1000000); continue; }
-            // بعد 10 محاولات
+            // استنفذنا كل المحاولات بدون نجاح
             clearPending($psid);
             sendMessage($psid,
-                "عذرا 😬 لم تكمل اسبوع ⚠️ اكمل اسبوع و اعد المحاولة مجددا 📆\n\n" .
+                "هناك اشكال في سيرفر جيزي ⚠️ لم نستطع التفعيل لرقمك \n\n" .
                 "⚡ قناة التلقرام : https://t.me/tasjilbott"
             );
             clearSession($psid);
@@ -615,16 +628,21 @@ function activate70DZ(string $psid, array $user): void
             continue;
         }
 
-        // ── unauthorized product → إعادة المحاولة ───────────────────────
-        if (stripos($message, 'unauthorized product') !== false
-            || ($statusCode === '401' && $hasTransaction)) {
+        // ── unauthorized product + hasTx=TRUE → أسبوع لم يكتمل ────────
+        if (stripos($message, 'unauthorized product') !== false && $hasTransaction) {
+            clearPending($psid);
+            sendMessage($psid, "عذرا 😬 لم تكمل اسبوع ⚠️ اكمل اسبوع و اعد المحاولة مجددا 📆\n\n⚡ قناة التلقرام : https://t.me/tasjilbott");
+            clearSession($psid); sendMessage($psid, "📱 أرسل رقم هاتفك للبدء من جديد."); return;
+        }
 
+        // ── unauthorized product + hasTx=FALSE → أعد المحاولة ──────────
+        if (stripos($message, 'unauthorized product') !== false && !$hasTransaction) {
             if (!$unauthorizedDetected && $attempt === 1) {
                 sendMessage($psid, "جاري إعادة المحاولة قد نتأخر قليلاً... 🕘");
                 $unauthorizedDetected = true;
             }
             if ($attempt < $maxAttempts) { usleep(1000000); continue; }
-            // بعد 10 محاولات → UNAUTHORIZED_PRODUCT
+            // استنفذنا كل المحاولات
             clearPending($psid);
             sendMessage($psid, "هناك اشكال في سيرفر جيزي ⚠️ لم نستطع التفعيل لرقمك \n\n⚡ قناة التلقرام : https://t.me/tasjilbott");
             clearSession($psid); sendMessage($psid, "📱 أرسل رقم هاتفك للبدء من جديد."); return;
