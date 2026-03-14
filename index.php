@@ -9,10 +9,16 @@ define('USERS_DIR',       '/tmp/fb_users');
 define('PHONE_MAP_FILE',  '/tmp/fb_phone_map.json');
 define('PENDING_DIR',     '/tmp/fb_pending');
 define('DB_FILE',         '/tmp/fb_dedup.sqlite');
+define('MGM_DIR',         '/tmp/fb_mgm');
+
+define('MGM_BASE_URL',    'https://apim.djezzy.dz/mobile-api');
+define('MGM_CLIENT_ID',   '87pIExRhxBb3_wGsA5eSEfyATloa');
+define('MGM_CLIENT_SECRET','uf82p68Bgisp8Yg1Uz8Pf6_v1XYa');
 
 @mkdir(SESSIONS_DIR, 0777, true);
 @mkdir(USERS_DIR,    0777, true);
 @mkdir(PENDING_DIR,  0777, true);
+@mkdir(MGM_DIR,      0777, true);
 
 // ════════════════════════════════════════════════════════════════════════════
 // SQLite — Dedup + User Lock
@@ -194,6 +200,10 @@ function processEvent(string $psid, array $event): void
 
     if ($state === 'awaiting_otp') { handleAwaitingOtp($psid, $text, $session); return; }
 
+    // ── MGM states ──────────────────────────────────────────────────────────
+    if ($state === 'mgm_await_invitee') { handleMgmAwaitInvitee($psid, $text, $session); return; }
+    if ($state === 'mgm_await_otp')     { handleMgmAwaitOtp($psid, $text, $session);     return; }
+
     if ($state === 'menu') {
         if     ($text === '1') handlePostback($psid, 'MENU_2G');
         elseif ($text === '2') handlePostback($psid, 'MENU_70DZ');
@@ -298,7 +308,12 @@ function handlePostback(string $psid, string $payload): void
             activate70DZ($psid, $user);
             break;
         case 'MENU_INVITE':
-            sendMessage($psid, "قيد التطوير 🛠️"); break;
+            $sess = getSession($psid); $user = getUser($psid);
+            if (!$user || empty($user['access_token'])) { sendMessage($psid, "⚠️ يجب تسجيل الدخول أولاً، أرسل رقم هاتفك."); return; }
+            if (!empty($sess['msisdn'])) $user['msisdn'] = $sess['msisdn'];
+            setSession($psid, array_merge($sess, ['state' => 'mgm_await_invitee']));
+            sendMessage($psid, "📨 أدخل رقم الهاتف المدعو (الرقم الذي سيستقبل الدعوة):\nمثال: 0770123456");
+            break;
         default:
             sendWelcome($psid);
     }
@@ -780,6 +795,384 @@ function doSubscriptionCurl(string $url, string $payload, string $token, string 
 
     // raw response (مثل Python: {"raw": body, "status_code": code})
     return ['http_code' => $httpCode, 'json' => ['raw' => $bodyStr, 'status_code' => $httpCode], 'body' => $bodyStr];
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// MGM — Member Get Member (نظام الدعوات)
+// ════════════════════════════════════════════════════════════════════════════
+
+// ── تخزين بيانات MGM المؤقتة ────────────────────────────────────────────
+function saveMgmData(string $psid, array $data): void
+{
+    file_put_contents(MGM_DIR . "/{$psid}.json", json_encode($data, JSON_UNESCAPED_UNICODE));
+}
+function getMgmData(string $psid): ?array
+{
+    $f = MGM_DIR . "/{$psid}.json";
+    if (!file_exists($f)) return null;
+    $d = json_decode(@file_get_contents($f), true);
+    if (!$d) return null;
+    // انتهاء صلاحية بعد 10 دقائق
+    if (time() - ($d['ts'] ?? 0) > 600) { @unlink($f); return null; }
+    return $d;
+}
+function clearMgmData(string $psid): void
+{
+    $f = MGM_DIR . "/{$psid}.json";
+    if (file_exists($f)) @unlink($f);
+}
+
+// ── الخطوة 1: استقبال رقم المدعو ────────────────────────────────────────
+function handleMgmAwaitInvitee(string $psid, string $text, array $session): void
+{
+    $digits = preg_replace('/\D/', '', $text);
+
+    if (!preg_match('/^07\d{8}$/', $digits)) {
+        sendMessage($psid, "❌ رقم غير صحيح.\nالرجاء إدخال رقم جيزي صحيح يبدأ بـ 07 (10 أرقام).\nمثال: 0770123456");
+        return;
+    }
+
+    $user = getUser($psid);
+    if (!$user || empty($user['access_token'])) {
+        sendMessage($psid, "⚠️ انتهت جلستك، أرسل رقم هاتفك للتسجيل من جديد.");
+        setSession($psid, ['state' => 'idle']);
+        return;
+    }
+
+    $inviteeMsisdn = '213' . substr($digits, 1);
+    $senderMsisdn  = $session['msisdn'] ?? $user['msisdn'];
+
+    if ($inviteeMsisdn === $senderMsisdn) {
+        sendMessage($psid, "❌ لا يمكنك دعوة نفسك! أدخل رقم شخص آخر.");
+        return;
+    }
+
+    // حفظ رقم المدعو والانتقال لطلب OTP
+    saveMgmData($psid, ['invitee' => $inviteeMsisdn, 'sender' => $senderMsisdn, 'ts' => time()]);
+
+    // إرسال OTP للمرسل (الداعي)
+    $senderPhone = '0' . substr($senderMsisdn, 3);
+    sendMessage($psid, "⏳ جاري إرسال رمز التحقق إلى رقمك {$senderPhone}...");
+
+    if (mgmRequestOtp($senderMsisdn)) {
+        setSession($psid, array_merge($session, ['state' => 'mgm_await_otp']));
+        sendMessage($psid, "✅ تم إرسال رمز التحقق إلى رقمك.\n\n🔢 أدخل الرمز المكوّن من 6 أرقام:");
+    } else {
+        sendMessage($psid, "❌ فشل إرسال رمز التحقق، حاول مجدداً.");
+        setSession($psid, array_merge($session, ['state' => 'menu']));
+        sendMenu($psid);
+    }
+}
+
+// ── الخطوة 2: استقبال OTP وتفعيل الدعوة ────────────────────────────────
+function handleMgmAwaitOtp(string $psid, string $text, array $session): void
+{
+    if (!preg_match('/\b(\d{6})\b/', $text, $m)) {
+        sendMessage($psid, "⚠️ الرجاء إدخال رمز التحقق المكوّن من 6 أرقام.");
+        return;
+    }
+
+    $mgmData = getMgmData($psid);
+    if (!$mgmData) {
+        sendMessage($psid, "⏱️ انتهت مهلة الجلسة، أعد المحاولة من البداية.");
+        setSession($psid, array_merge($session, ['state' => 'menu']));
+        sendMenu($psid);
+        return;
+    }
+
+    $senderMsisdn  = $mgmData['sender'];
+    $inviteeMsisdn = $mgmData['invitee'];
+    $otp           = $m[1];
+
+    sendMessage($psid, "⏳ جاري التحقق والتفعيل...");
+
+    // الحصول على توكن MGM
+    $tokenResult = mgmLoginWithOtp($senderMsisdn, $otp);
+    if ($tokenResult === 'wrong_otp') {
+        sendMessage($psid, "❌ الرمز خاطئ، أعد إدخال الرمز الصحيح أو أرسل رقمك لطلب رمز جديد.");
+        return;
+    }
+    if (!$tokenResult) {
+        sendMessage($psid, "❌ حدث خطأ أثناء التحقق، حاول مجدداً.");
+        return;
+    }
+
+    $mgmToken = $tokenResult['token'];
+
+    // ── فحص الدعوات الحالية ──────────────────────────────────────────────
+    $invResult = mgmGetInvitations($mgmToken, $senderMsisdn);
+    $campaign  = $invResult['campaign'] ?? [];
+    $maxInv    = (int)($campaign['maxInvitation'] ?? 5);
+    $allInvs   = $invResult['all_invitations'] ?? [];
+    $pending   = $invResult['pending_invitations'] ?? [];
+    $done      = $invResult['accepted_invitations'] ?? [];
+
+    $totalCount = count($allInvs);
+
+    // إذا وصل للحد الأقصى: حاول حذف المعلقة
+    if ($totalCount >= $maxInv) {
+        if (!empty($pending)) {
+            sendMessage($psid, "⚠️ وصلت للحد الأقصى ({$maxInv} دعوات).\n🗑️ جاري محاولة حذف الدعوات المعلقة...");
+            $deleted = 0;
+            foreach ($pending as $inv) {
+                $recv = $inv['msisdnReceiver'] ?? '';
+                if ($recv && mgmDeleteInvitation($mgmToken, $senderMsisdn, $recv)) {
+                    $deleted++;
+                    break; // نحذف واحدة فقط لنفسح مكاناً
+                }
+            }
+            if ($deleted === 0) {
+                // حساب تاريخ انتهاء أقدم دعوة
+                $expireMsg = '';
+                if (!empty($allInvs[0]['expireAt'])) {
+                    $expireDate = substr($allInvs[0]['expireAt'], 0, 10);
+                    $expireMsg  = "\n📅 أقرب انتهاء: {$expireDate}";
+                }
+                clearMgmData($psid);
+                setSession($psid, array_merge($session, ['state' => 'menu']));
+                sendMessage($psid, "❌ وصلت للحد الأقصى ({$maxInv} دعوات) ولا يمكن حذف الدعوات المعلقة الآن.{$expireMsg}\n\nيمكنك المحاولة مجدداً لاحقاً.");
+                sendMenu($psid);
+                return;
+            }
+            sendMessage($psid, "✅ تم حذف دعوة معلقة، جاري إرسال الدعوة الجديدة...");
+        } else {
+            // لا توجد معلقة — الكل مكتمل
+            $expireMsg = '';
+            if (!empty($done[0]['expireAt'])) {
+                $expireDate = substr($done[0]['expireAt'], 0, 10);
+                $expireMsg  = "\n📅 أقرب انتهاء: {$expireDate}";
+            }
+            clearMgmData($psid);
+            setSession($psid, array_merge($session, ['state' => 'menu']));
+            sendMessage($psid, "❌ وصلت للحد الأقصى ({$maxInv} دعوات) وجميعها مكتملة.{$expireMsg}\n\nيمكنك المحاولة بعد انتهاء صلاحية إحداها.");
+            sendMenu($psid);
+            return;
+        }
+    }
+
+    // ── إرسال الدعوة ─────────────────────────────────────────────────────
+    $sendResult = mgmSendInvitation($mgmToken, $senderMsisdn, $inviteeMsisdn);
+
+    if (!$sendResult['success']) {
+        $errBody = $sendResult['body'] ?? '';
+        // تحليل رسائل الخطأ الشائعة
+        if (stripos($errBody, 'already') !== false || stripos($errBody, 'exist') !== false) {
+            sendMessage($psid, "⚠️ هذا الرقم تم دعوته مسبقاً.");
+        } elseif (stripos($errBody, 'limit') !== false || stripos($errBody, 'max') !== false) {
+            sendMessage($psid, "❌ وصلت للحد الأقصى من الدعوات.");
+        } else {
+            sendMessage($psid, "❌ فشل إرسال الدعوة.\nالسبب: " . substr($errBody, 0, 200));
+        }
+        clearMgmData($psid);
+        setSession($psid, array_merge($session, ['state' => 'menu']));
+        sendMenu($psid);
+        return;
+    }
+
+    // ── تفعيل المكافأة للداعي ─────────────────────────────────────────────
+    sendMessage($psid, "✅ تم إرسال الدعوة!\n⏳ جاري تفعيل المكافأة للداعي...");
+    $rewardSender = mgmActivateReward($mgmToken, $senderMsisdn);
+
+    // ── تفعيل المكافأة للمدعو (بصرف النظر عن نتيجة الداعي) ───────────────
+    $rewardInvitee = mgmActivateReward($mgmToken, $inviteeMsisdn);
+
+    // ── بناء رسالة النتيجة ────────────────────────────────────────────────
+    $inviteeDisplay = '0' . substr($inviteeMsisdn, 3);
+    $senderDisplay  = '0' . substr($senderMsisdn, 3);
+
+    $senderStatus  = $rewardSender  ? "✅ نجح" : "⚠️ لم يتم أو تأخر";
+    $inviteeStatus = $rewardInvitee ? "✅ نجح" : "⚠️ لم يتم أو تأخر";
+
+    $resultMsg  = "🎁 نتيجة تفعيل الدعوة:\n\n";
+    $resultMsg .= "📱 الداعي ({$senderDisplay}): {$senderStatus}\n";
+    $resultMsg .= "📱 المدعو ({$inviteeDisplay}): {$inviteeStatus}\n\n";
+
+    if ($rewardSender || $rewardInvitee) {
+        $resultMsg .= "✅ تم تفعيل المكافأة بنجاح 🎉\n";
+        $resultMsg .= "⏳ يمكنك إعادة المحاولة بعد 24 ساعة\n\n";
+        $resultMsg .= "🥰 الناس لي سجلت فالموقع شكرا لكم 🥰\n\n";
+        $resultMsg .= "🔴 ولي مزال يروح يدخل للموقع 👇\n\n";
+        $resultMsg .= "https://timebucks.com/?refID=227870531\n\n";
+        $resultMsg .= "✅ ويسجل بحساب جوجل وبس 🥰\n";
+        $resultMsg .= "هكا راكم دعموا فيا باه نستمر وشكرا";
+    } else {
+        $resultMsg .= "❌ لم يتم تفعيل المكافأة، قد تكون مؤجلة من طرف جيزي.";
+    }
+
+    clearMgmData($psid);
+    setSession($psid, array_merge($session, ['state' => 'menu']));
+    sendMessage($psid, $resultMsg);
+    sendMenu($psid);
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// MGM API Calls
+// ════════════════════════════════════════════════════════════════════════════
+
+function mgmRequestOtp(string $msisdn): bool
+{
+    $url  = MGM_BASE_URL . '/oauth2/registration';
+    $body = json_encode([
+        'consent-agreement' => [['marketing-notifications' => false]],
+        'is-consent'        => true,
+    ]);
+    $params = http_build_query(['msisdn' => $msisdn, 'client_id' => MGM_CLIENT_ID, 'scope' => 'smsotp']);
+
+    $ch = curl_init("{$url}?{$params}");
+    curl_setopt_array($ch, [
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => $body,
+        CURLOPT_HTTPHEADER     => ['Content-Type: application/json', 'Accept: application/json', 'User-Agent: MobileApp/3.0.0', 'accept-language: ar'],
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 10,
+        CURLOPT_SSL_VERIFYPEER => false,
+    ]);
+    $resp = curl_exec($ch);
+    $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    dbg("[MGM_OTP] code={$code} body=" . substr((string)$resp, 0, 300));
+    return $code >= 200 && $code < 300;
+}
+
+function mgmLoginWithOtp(string $msisdn, string $otp): mixed
+{
+    $url  = MGM_BASE_URL . '/oauth2/token';
+    $data = http_build_query([
+        'otp'           => $otp,
+        'mobileNumber'  => $msisdn,
+        'scope'         => 'djezzyAppV2',
+        'client_id'     => MGM_CLIENT_ID,
+        'client_secret' => MGM_CLIENT_SECRET,
+        'grant_type'    => 'mobile',
+    ]);
+
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => $data,
+        CURLOPT_HTTPHEADER     => ['Content-Type: application/x-www-form-urlencoded', 'User-Agent: MobileApp/3.0.0'],
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 10,
+        CURLOPT_SSL_VERIFYPEER => false,
+    ]);
+    $resp = curl_exec($ch);
+    $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    dbg("[MGM_LOGIN] code={$code} body=" . substr((string)$resp, 0, 300));
+
+    if ($code === 200) {
+        $json = @json_decode((string)$resp, true);
+        if (isset($json['access_token'])) {
+            return ['token' => 'Bearer ' . $json['access_token'], 'access_token' => $json['access_token']];
+        }
+    }
+    $json = @json_decode((string)$resp, true);
+    if ($code === 400 && ($json['error'] ?? '') === 'invalid_grant') return 'wrong_otp';
+    return false;
+}
+
+function mgmGetInvitations(string $token, string $msisdn): array
+{
+    $url = MGM_BASE_URL . "/api/v1/services/mgm/invitations/{$msisdn}";
+    $ch  = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_HTTPHEADER     => ['Content-Type: application/json', 'Accept: application/json', 'User-Agent: MobileApp/3.0.0', "authorization: {$token}"],
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 10,
+        CURLOPT_SSL_VERIFYPEER => false,
+    ]);
+    $resp = curl_exec($ch);
+    $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    dbg("[MGM_INV] code={$code} body=" . substr((string)$resp, 0, 500));
+
+    $result = ['all_invitations' => [], 'pending_invitations' => [], 'accepted_invitations' => [], 'campaign' => []];
+    if ($code === 200) {
+        $json    = @json_decode((string)$resp, true);
+        $allInvs = $json['data']['invitations'] ?? [];
+        $result['campaign']              = $json['data']['campaign'] ?? [];
+        $result['all_invitations']       = $allInvs;
+        $result['pending_invitations']   = array_values(array_filter($allInvs, fn($i) => ($i['status'] ?? '') === 'PENDING'));
+        $result['accepted_invitations']  = array_values(array_filter($allInvs, fn($i) => ($i['status'] ?? '') === 'DONE'));
+    }
+    return $result;
+}
+
+function mgmSendInvitation(string $token, string $senderMsisdn, string $inviteeMsisdn): array
+{
+    $url  = MGM_BASE_URL . '/api/v1/services/mgm/send-invitation';
+    $body = json_encode(['msisdnReceiver' => $inviteeMsisdn, 'msisdn' => $senderMsisdn]);
+
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => $body,
+        CURLOPT_HTTPHEADER     => ['Content-Type: application/json', 'Accept: application/json', 'User-Agent: MobileApp/3.0.0', "authorization: {$token}"],
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 10,
+        CURLOPT_SSL_VERIFYPEER => false,
+    ]);
+    $resp = curl_exec($ch);
+    $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    dbg("[MGM_SEND] code={$code} body=" . substr((string)$resp, 0, 400));
+
+    return ['success' => $code >= 200 && $code < 300, 'status_code' => $code, 'body' => (string)$resp];
+}
+
+function mgmActivateReward(string $token, string $msisdn): bool
+{
+    // تفعيل المكافأة: طلب اشتراك MGM للرقم المحدد
+    $url  = "https://apim.djezzy.dz/djezzy-api/api/v1/subscribers/{$msisdn}/subscription-product?include=";
+    $body = json_encode(['data' => ['id' => 'MGM_GIFT', 'type' => 'products']]);
+
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => $body,
+        CURLOPT_HTTPHEADER     => [
+            'Content-Type: application/json',
+            "Authorization: {$token}",
+            'x-csrf-token: YACIN_DZ',
+            'User-Agent: Djezzy/2.7.0',
+            'Host: apim.djezzy.dz',
+            'Accept: application/json',
+            'Accept-Encoding: gzip',
+        ],
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_ENCODING       => 'gzip',
+        CURLOPT_TIMEOUT        => 10,
+        CURLOPT_SSL_VERIFYPEER => false,
+    ]);
+    $resp = curl_exec($ch);
+    $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    dbg("[MGM_REWARD] msisdn={$msisdn} code={$code} body=" . substr((string)$resp, 0, 400));
+
+    // نعتبر 200/201 نجاح
+    return $code >= 200 && $code < 300;
+}
+
+function mgmDeleteInvitation(string $token, string $senderMsisdn, string $receiverMsisdn): bool
+{
+    $url  = MGM_BASE_URL . '/api/v1/services/mgm/delete-invitation';
+    $body = json_encode(['msisdnReceiver' => $receiverMsisdn, 'msisdn' => $senderMsisdn]);
+
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => $body,
+        CURLOPT_HTTPHEADER     => ['Content-Type: application/json', 'Accept: application/json', 'User-Agent: MobileApp/3.0.0', "authorization: {$token}"],
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 10,
+        CURLOPT_SSL_VERIFYPEER => false,
+    ]);
+    $resp = curl_exec($ch);
+    $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    dbg("[MGM_DEL] recv={$receiverMsisdn} code={$code} body=" . substr((string)$resp, 0, 300));
+
+    return $code >= 200 && $code < 300;
 }
 
 // ════════════════════════════════════════════════════════════════════════════
