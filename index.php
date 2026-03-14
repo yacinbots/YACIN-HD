@@ -387,7 +387,7 @@ function activate2G(string $psid, array $user): void
     $refreshToken  = $user['refresh_token'];
     $displayMasked = substr($msisdn, 0, 4) . 'xxxx' . substr($msisdn, -2);
 
-    $maxAttempts         = 30;
+    $maxAttempts         = 10;
     $maxTokenRefresh     = 3;
     $tokenRefreshCount   = 0;
     $unauthorizedDetected = false;  // رسالة التأخير مرة واحدة فقط (attempt == 1)
