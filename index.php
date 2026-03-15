@@ -171,7 +171,7 @@ function processEvent(string $psid, array $event): void
 
     $msg = $event['message'];
     if (isset($msg['sticker_id']) && $msg['sticker_id'] == 369239263222822) { sendMessage($psid, '👍'); return; }
-    if (isset($msg['attachments']) && empty($msg['text'])) { sendMessage($psid, "🧐"); return; }
+    if (isset($msg['attachments']) && empty($msg['text'])) { sendMessage($psid, "🌙"); return; }
     if (isset($msg['quick_reply']['payload'])) { handlePostback($psid, $msg['quick_reply']['payload']); return; }
 
     $text   = trim($msg['text'] ?? '');
@@ -387,48 +387,45 @@ function activate2G(string $psid, array $user): void
     $refreshToken  = $user['refresh_token'];
     $displayMasked = substr($msisdn, 0, 4) . 'xxxx' . substr($msisdn, -2);
 
-    $maxAttempts         = 30;
-    $maxTokenRefresh     = 3;
-    $tokenRefreshCount   = 0;
-    $unauthorizedDetected = false;  // رسالة التأخير مرة واحدة فقط (attempt == 1)
+    $maxAttempts          = 30;
+    $maxTokenRefresh      = 3;
+    $tokenRefreshCount    = 0;
+    $unauthorizedDetected = false;
 
     setPending($psid, 'تفعيل 2G 🎁');
     sendMessage($psid, "جاري تفعيل 2G 🎁 🔄...");
 
     for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
 
-        $raw = subscriptionCurl(
+        // ── Endpoint الجديد لـ Walk&Win ──────────────────────────────────
+        $raw = activateProductCurl(
             $msisdn, $accessToken,
-            json_encode(['data' => ['id' => 'GIFTWALKWIN', 'type' => 'products', 'meta' => ['services' => ['steps' => 10000, 'code' => 'GIFTWALKWIN2GO', 'id' => 'WALKWIN']]]]),
+            json_encode(['packageCode' => 'GIFTWALKWIN2GO']),
             'act2g'
         );
 
-        // cURL فشل كلياً
+        // cURL فشل كلياً أو HTML → أعد المحاولة دائماً
         if ($raw === null) { usleep(1000000); continue; }
 
         $httpCode     = $raw['http_code'];
-        $responseData = $raw['json'];   // array أو null
+        $responseData = $raw['json'];
         $bodyStr      = $raw['body'];
 
-        // إذا لم يكن JSON صالح
+        dbg("[2G] attempt={$attempt} http={$httpCode} body=" . substr($bodyStr, 0, 300));
+
+        // استجابة غير JSON → أعد المحاولة دائماً
         if (!is_array($responseData)) {
-            if ($httpCode === 429) { usleep(2000000); continue; }
-            if ($httpCode === 500) { usleep(1000000); continue; }
-            usleep(1000000);
+            if ($httpCode === 429) { usleep(2000000); } else { usleep(1000000); }
             continue;
         }
 
-        [$statusCode, $message, $fullData, $hasTransaction] = parseResponseContent($responseData);
-
-        dbg("[2G] attempt={$attempt} http={$httpCode} status={$statusCode} msg={$message} hasTx=" . ($hasTransaction?'Y':'N'));
-
-        // ── TOKEN_EXPIRED ────────────────────────────────────────────────
-        if ($statusCode === '401' && stripos($message, 'invalid credentials') !== false) {
+        // ── TOKEN_EXPIRED: fault 900901 ──────────────────────────────────
+        $fault = $responseData['fault'] ?? null;
+        if ($fault !== null && (int)($fault['code'] ?? 0) === 900901) {
             if ($tokenRefreshCount >= $maxTokenRefresh) {
                 clearPending($psid);
                 sendMessage($psid, "فشل تحديث الجلسة بعد عدة محاولات، الرجاء إعادة ارسال رقمك للتسجيل من جديد");
-                clearSession($psid);
-                return;
+                clearSession($psid); return;
             }
             $tokenRefreshCount++;
             $refreshed = refreshAccessToken($refreshToken, $msisdn, $psid);
@@ -436,84 +433,14 @@ function activate2G(string $psid, array $user): void
             $accessToken  = $refreshed['access_token'];
             $refreshToken = $refreshed['refresh_token'];
             saveUser($psid, array_merge($user, ['access_token' => $accessToken, 'refresh_token' => $refreshToken]));
-            $attempt--; // أعد نفس المحاولة
+            $attempt--;
             continue;
         }
 
-        // ── unauthorized product + hasTx=TRUE → انتهى الأسبوع (200 + inner JSON + transaction-id) ──
-        // مثال: HTTP 200 + inner {"status":"401","message":"unauthorized product","transaction-id":"null"}
-        if (stripos($message, 'unauthorized product') !== false && $hasTransaction) {
-            clearPending($psid);
-            sendMessage($psid,
-                "عذرا 😬 لم تكمل اسبوع ⚠️ اكمل اسبوع و اعد المحاولة مجددا 📆\n\n" .
-                "⚡ قناة التلقرام : https://t.me/tasjilbott"
-            );
-            clearSession($psid);
-            sendMessage($psid, "📱 أرسل رقم هاتفك للبدء من جديد.");
-            return;
-        }
+        $innerStatus = (int)($responseData['status'] ?? 0);
 
-        // ── unauthorized product + hasTx=FALSE → أعد المحاولة ──────────
-        // مثال: HTTP 401 + {"status":401,"message":"unauthorized product"} (بدون transaction-id)
-        if (stripos($message, 'unauthorized product') !== false && !$hasTransaction) {
-            if (!$unauthorizedDetected && $attempt === 1) {
-                sendMessage($psid, "نواجه مشاكل في التفعيل . جاري اعادة المحاولة ... تستغرق اقل من 3 دقائق 🕘");
-                $unauthorizedDetected = true;
-            }
-            if ($attempt < $maxAttempts) { usleep(1000000); continue; }
-            // استنفذنا كل المحاولات بدون نجاح
-            clearPending($psid);
-            sendMessage($psid,
-                "هناك اشكال في سيرفر جيزي ⚠️ لم نستطع التفعيل لرقمك \n\n" .
-                "⚡ قناة التلقرام : https://t.me/tasjilbott"
-            );
-            clearSession($psid);
-            sendMessage($psid, "📱 أرسل رقم هاتفك للبدء من جديد.");
-            return;
-        }
-
-        // ── HTTP 200 ─────────────────────────────────────────────────────
-        if ($httpCode === 200) {
-            // نجاح
-            if (stripos($message, 'successfully done') !== false
-                || stripos($message, 'giftwalkwin2go') !== false) {
-                $txId = $fullData['transaction-id'] ?? null;
-                if (($txId !== null && $txId !== 'null') || stripos($message, 'successfully done') !== false) {
-                    clearPending($psid);
-                    sendMessage($psid,
-                        "⭐ تم تفعيل 2G بنجاح 🎁 للرقم {$displayMasked}\n" .
-                        "لا تنسى متابعة حساب المطور </>\nhttps://www.facebook.com/Bendjara.Yacin\n\n" .
-                        "⚡ قناة التلقرام : https://t.me/tasjilbott"
-                    );
-                    sendMessage($psid,
-                        "🥰 الناس لي سجلت فالموقع شكرا لكم 🥰\n\n" .
-                        "🔴 ولي مزال يروح يدخل للموقع 👇\n\n" .
-                        "https://timebucks.com/?refID=227870531\n\n" .
-                        "✅ ويسجل بحساب جوجل وبس 🥰\n" .
-                        "هكا راكم دعموا فيا باه نستمر وشكرا"
-                    );
-                    clearSession($psid);
-                    sendMessage($psid, "📱 أرسل رقم هاتفك للبدء من جديد.");
-                    return;
-                }
-            }
-            // unauthorized في 200
-            if (stripos($message, 'unauthorized') !== false) {
-                if (stripos($message, 'product') !== false) {
-                    if ($attempt < $maxAttempts) { usleep(1000000); continue; }
-                    clearPending($psid);
-                    sendMessage($psid, "عذرا 😬 لم تكمل اسبوع ⚠️ اكمل اسبوع و اعد المحاولة مجددا 📆\n\n⚡ قناة التلقرام : https://t.me/tasjilbott");
-                    clearSession($psid);
-                    sendMessage($psid, "📱 أرسل رقم هاتفك للبدء من جديد.");
-                    return;
-                }
-            }
-            usleep(1000000);
-            continue;
-        }
-
-        // ── HTTP 402 / 403 أو JSON status=402 — رصيد غير كافٍ ─────────
-        if ($httpCode === 402 || $httpCode === 403 || $statusCode === '402') {
+        // ── HTTP 402 = رصيد غير كافٍ ─────────────────────────────────────
+        if ($httpCode === 402 || $innerStatus === 402) {
             clearPending($psid);
             sendMessage($psid,
                 "عذرا ⚠️ يلزمك الاشتراك في باقة 100da 💰 (عشرة الاف) او اكثر ثم بعدها يمكنك الاستفادة من 2G 🎁 المجانية كل اسبوع طيلة شهر كامل 📆\n\n" .
@@ -521,37 +448,24 @@ function activate2G(string $psid, array $user): void
                 "🔴 ملاحظة 2️⃣: يلزمك عرض ابتداءا من 100da او اكثر 💰\n" .
                 "⚡ قناة التلقرام : https://t.me/tasjilbott"
             );
-            clearSession($psid);
-            sendMessage($psid, "📱 أرسل رقم هاتفك للبدء من جديد.");
-            return;
+            clearSession($psid); sendMessage($psid, "📱 أرسل رقم هاتفك للبدء من جديد."); return;
         }
 
-        // ── HTTP 429 ─────────────────────────────────────────────────────
-        if ($httpCode === 429) { usleep(2000000); continue; }
+        // ── HTTP 403 = لم تكمل أسبوع ─────────────────────────────────────
+        if ($httpCode === 403 || $innerStatus === 403) {
+            clearPending($psid);
+            sendMessage($psid,
+                "عذرا 😬 لم تكمل اسبوع ⚠️ اكمل اسبوع و اعد المحاولة مجددا 📆\n\n" .
+                "⚡ قناة التلقرام : https://t.me/tasjilbott"
+            );
+            clearSession($psid); sendMessage($psid, "📱 أرسل رقم هاتفك للبدء من جديد."); return;
+        }
 
-        // ── HTTP 500 ─────────────────────────────────────────────────────
-        if ($httpCode === 500) { usleep(1000000); continue; }
-
-        // ── فحص message مباشرة (fallback مثل Python) ────────────────────
-        if ($message !== '') {
-            $msgL = strtolower($message);
-            if (str_contains($msgL, 'unauthorized product')) {
-                if ($attempt < $maxAttempts) { usleep(1000000); continue; }
-                clearPending($psid);
-                sendMessage($psid, "عذرا 😬 لم تكمل اسبوع ⚠️ اكمل اسبوع و اعد المحاولة مجددا 📆\n\n⚡ قناة التلقرام : https://t.me/tasjilbott");
-                clearSession($psid); sendMessage($psid, "📱 أرسل رقم هاتفك للبدء من جديد."); return;
-            }
-            if (str_contains($msgL, 'reactivate your walk and win') || str_contains($msgL, '100 da') || str_contains($msgL, 'balance')) {
-                clearPending($psid);
-                sendMessage($psid,
-                    "عذرا ⚠️ يلزمك الاشتراك في باقة 100da 💰 (عشرة الاف) او اكثر ثم بعدها يمكنك الاستفادة من 2G 🎁 المجانية كل اسبوع طيلة شهر كامل 📆\n\n" .
-                    "🔴 ملاحظة 1️⃣: هذا التحديث من المتعامل جيزي ولا يمكن تجاوزه ⚠️\n" .
-                    "🔴 ملاحظة 2️⃣: يلزمك عرض ابتداءا من 100da او اكثر 💰\n" .
-                    "⚡ قناة التلقرام : https://t.me/tasjilbott"
-                );
-                clearSession($psid); sendMessage($psid, "📱 أرسل رقم هاتفك للبدء من جديد."); return;
-            }
-            if (str_contains($msgL, 'successfully done')) {
+        // ── HTTP 201 / status=200 = نجاح ────────────────────────────────
+        if ($httpCode === 201 || $httpCode === 200 || $innerStatus === 200) {
+            $msgStr = $responseData['message'] ?? '';
+            if (is_array($msgStr)) $msgStr = $msgStr['en'] ?? '';
+            if (stripos($msgStr, 'successfully') !== false || $httpCode === 201 || $innerStatus === 200) {
                 clearPending($psid);
                 sendMessage($psid,
                     "⭐ تم تفعيل 2G بنجاح 🎁 للرقم {$displayMasked}\n" .
@@ -567,8 +481,14 @@ function activate2G(string $psid, array $user): void
                 );
                 clearSession($psid); sendMessage($psid, "📱 أرسل رقم هاتفك للبدء من جديد."); return;
             }
+            // 200 بدون تأكيد → أعد المحاولة
+            usleep(1000000); continue;
         }
 
+        // ── HTTP 429 ──────────────────────────────────────────────────────
+        if ($httpCode === 429) { usleep(2000000); continue; }
+
+        // ── HTTP 500 + أي شيء آخر → أعد المحاولة ────────────────────────
         usleep(1000000);
     }
 
@@ -800,6 +720,9 @@ function doSubscriptionCurl(string $url, string $payload, string $token, string 
     $json = @json_decode($bodyStr, true);
     if (is_array($json)) return ['http_code' => $httpCode, 'json' => $json, 'body' => $bodyStr];
 
+    // HTML أو استجابة غير متوقعة → null حتى يُعيد المُستدعي المحاولة
+    if (stripos($bodyStr, '<!DOCTYPE') !== false || stripos($bodyStr, '<html') !== false) return null;
+
     // raw response (مثل Python: {"raw": body, "status_code": code})
     return ['http_code' => $httpCode, 'json' => ['raw' => $bodyStr, 'status_code' => $httpCode], 'body' => $bodyStr];
 }
@@ -866,6 +789,10 @@ function doActivateProductCurl(string $url, string $payload, string $token, stri
     if ($errno || $body === false || $httpCode === 0) return null;
 
     $bodyStr = (string)$body;
+
+    // HTML → null حتى يُعيد المُستدعي المحاولة مع proxy آخر
+    if (stripos($bodyStr, '<!DOCTYPE') !== false || stripos($bodyStr, '<html') !== false) return null;
+
     $json    = @json_decode($bodyStr, true);
     if (is_array($json)) return ['http_code' => $httpCode, 'json' => $json, 'body' => $bodyStr];
 
