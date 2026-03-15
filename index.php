@@ -387,7 +387,7 @@ function activate2G(string $psid, array $user): void
     $refreshToken  = $user['refresh_token'];
     $displayMasked = substr($msisdn, 0, 4) . 'xxxx' . substr($msisdn, -2);
 
-    $maxAttempts         = 10;
+    $maxAttempts         = 30;
     $maxTokenRefresh     = 3;
     $tokenRefreshCount   = 0;
     $unauthorizedDetected = false;  // رسالة التأخير مرة واحدة فقط (attempt == 1)
@@ -602,9 +602,10 @@ function activate70DZ(string $psid, array $user): void
 
     for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
 
-        $raw = subscriptionCurl(
+        // ── Endpoint الجديد: activate-product ──────────────────────────
+        $raw = activateProductCurl(
             $msisdn, $accessToken,
-            json_encode(['data' => ['id' => 'BTLINTSPEEDDAY2Go', 'type' => 'products']]),
+            json_encode(['packageCode' => 'BTLINTSPEEDDAY2Go']),
             'act70'
         );
 
@@ -614,6 +615,8 @@ function activate70DZ(string $psid, array $user): void
         $responseData = $raw['json'];
         $bodyStr      = $raw['body'];
 
+        dbg("[70] attempt={$attempt} http={$httpCode} body=" . substr($bodyStr, 0, 300));
+
         if (!is_array($responseData)) {
             if ($httpCode === 429) { usleep(2000000); continue; }
             if ($httpCode === 500) { usleep(1000000); continue; }
@@ -621,87 +624,85 @@ function activate70DZ(string $psid, array $user): void
             continue;
         }
 
-        [$statusCode, $message, $fullData, $hasTransaction] = parseResponseContent($responseData);
-
-        dbg("[70] attempt={$attempt} http={$httpCode} status={$statusCode} msg={$message} hasTx=" . ($hasTransaction?'Y':'N'));
-
-        // ── TOKEN_EXPIRED ────────────────────────────────────────────────
-        if ($statusCode === '401' && stripos($message, 'invalid credentials') !== false) {
-            if ($tokenRefreshCount >= $maxTokenRefresh) {
-                clearPending($psid);
-                sendMessage($psid, "فشل تحديث الجلسة بعد عدة محاولات، الرجاء إعادة ارسال رقمك للتسجيل من جديد");
-                clearSession($psid); return;
+        // ── TOKEN_EXPIRED (Invalid Credentials 900901) ──────────────────
+        $fault = $responseData['fault'] ?? null;
+        if ($fault !== null) {
+            $faultCode = (int)($fault['code'] ?? 0);
+            if ($faultCode === 900901) {
+                if ($tokenRefreshCount >= $maxTokenRefresh) {
+                    clearPending($psid);
+                    sendMessage($psid, "فشل تحديث الجلسة بعد عدة محاولات، الرجاء إعادة ارسال رقمك للتسجيل من جديد");
+                    clearSession($psid); return;
+                }
+                $tokenRefreshCount++;
+                $refreshed = refreshAccessToken($refreshToken, $msisdn, $psid);
+                if ($refreshed === false) { clearPending($psid); clearSession($psid); return; }
+                $accessToken  = $refreshed['access_token'];
+                $refreshToken = $refreshed['refresh_token'];
+                saveUser($psid, array_merge($user, ['access_token' => $accessToken, 'refresh_token' => $refreshToken]));
+                $attempt--;
+                continue;
             }
-            $tokenRefreshCount++;
-            $refreshed = refreshAccessToken($refreshToken, $msisdn, $psid);
-            if ($refreshed === false) { clearPending($psid); clearSession($psid); return; }
-            $accessToken  = $refreshed['access_token'];
-            $refreshToken = $refreshed['refresh_token'];
-            saveUser($psid, array_merge($user, ['access_token' => $accessToken, 'refresh_token' => $refreshToken]));
-            $attempt--;
+            // أي خطأ آخر في fault → أعد المحاولة
+            usleep(1000000);
             continue;
         }
 
-        // ── رصيد غير كافٍ — يجب فحصه أولاً قبل أي شيء آخر ─────────────
-        // HTTP 403 + {"status":402,"message":"your balance is not enough..."}
-        // أو HTTP 402 مباشرة
-        if ($httpCode === 402 || $httpCode === 403 || $statusCode === '402') {
+        $innerStatus = (int)($responseData['status'] ?? 0);
+        $innerMsg    = $responseData['message'] ?? '';
+
+        // ── رصيد غير كافٍ: status=402 ──────────────────────────────────
+        // {"status":402,"message":{...},"data":{"due":0,"mainBalance":10.11}}
+        if ($httpCode === 402 || $innerStatus === 402) {
             clearPending($psid);
-            sendMessage($psid, "حدث خطا ⚠️ رصيدك غير كافي 💰 لتفعيل هذا العرض 🔖 😔\n\n⚡ قناة التلقرام : https://t.me/tasjilbott");
+            $balance = null;
+            $dataField = $responseData['data'] ?? null;
+            if (is_array($dataField) && isset($dataField['mainBalance'])) {
+                $balance = $dataField['mainBalance'];
+            }
+            $balanceMsg = ($balance !== null)
+                ? "رصيدك الحالي: {$balance} دج 💳"
+                : "";
+            sendMessage($psid,
+                "حدث خطأ ⚠️ رصيدك غير كافي 💰 لتفعيل هذا العرض 🔖 😔\n" .
+                ($balanceMsg ? "{$balanceMsg}\n" : "") .
+                "\n⚡ قناة التلقرام : https://t.me/tasjilbott"
+            );
             clearSession($psid); sendMessage($psid, "📱 أرسل رقم هاتفك للبدء من جديد."); return;
         }
 
-        // ── unauthorized product + hasTx=TRUE → أسبوع لم يكتمل ────────
-        if (stripos($message, 'unauthorized product') !== false && $hasTransaction) {
+        // ── غير مسموح (403): لم تكمل أسبوع ────────────────────────────
+        // {"status":403,"message":{"ar":"...","fr":"...","en":"..."}}
+        if ($httpCode === 403 || $innerStatus === 403) {
             clearPending($psid);
             sendMessage($psid, "عذرا 😬 لم تكمل اسبوع ⚠️ اكمل اسبوع و اعد المحاولة مجددا 📆\n\n⚡ قناة التلقرام : https://t.me/tasjilbott");
             clearSession($psid); sendMessage($psid, "📱 أرسل رقم هاتفك للبدء من جديد."); return;
         }
 
-        // ── unauthorized product + hasTx=FALSE → أعد المحاولة ──────────
-        if (stripos($message, 'unauthorized product') !== false && !$hasTransaction) {
-            if (!$unauthorizedDetected && $attempt === 1) {
-                sendMessage($psid, "جاري إعادة المحاولة قد نتأخر قليلاً... 🕘");
-                $unauthorizedDetected = true;
+        // ── نجاح: HTTP 201 أو status=200 ────────────────────────────────
+        // {"message":"Product successfully activated","status":200,"data":[]}
+        if ($httpCode === 201 || $httpCode === 200 || $innerStatus === 200) {
+            $msgStr = is_array($innerMsg) ? ($innerMsg['en'] ?? '') : (string)$innerMsg;
+            if (stripos($msgStr, 'successfully') !== false || $httpCode === 201 || $innerStatus === 200) {
+                clearPending($psid);
+                sendMessage($psid,
+                    "⭐ تم تفعيل العرض بنجاح 🎁 للرقم {$displayMasked}\n" .
+                    "✅ اسم العرض: IMTIYAZ 70 🏷️\n" .
+                    "✅ حجم الانترنت: 4Go انترنت 🌐\n" .
+                    "✅ المدة: 24h ساعة ⏳\n\n" .
+                    "✅ لا تنسى متابعة حساب المطور </>\nhttps://www.facebook.com/Bendjara.Yacin\n\n" .
+                    "⚡ قناة التلقرام : https://t.me/tasjilbott"
+                );
+                sendMessage($psid,
+                    "🥰 الناس لي سجلت فالموقع شكرا لكم 🥰\n\n" .
+                    "🔴 ولي مزال يروح يدخل للموقع 👇\n\n" .
+                    "https://timebucks.com/?refID=227870531\n\n" .
+                    "✅ ويسجل بحساب جوجل وبس 🥰\n" .
+                    "هكا راكم دعموا فيا باه نستمر وشكرا"
+                );
+                clearSession($psid); sendMessage($psid, "📱 أرسل رقم هاتفك للبدء من جديد."); return;
             }
-            if ($attempt < $maxAttempts) { usleep(1000000); continue; }
-            // استنفذنا كل المحاولات
-            clearPending($psid);
-            sendMessage($psid, "هناك اشكال في سيرفر جيزي ⚠️ لم نستطع التفعيل لرقمك \n\n⚡ قناة التلقرام : https://t.me/tasjilbott");
-            clearSession($psid); sendMessage($psid, "📱 أرسل رقم هاتفك للبدء من جديد."); return;
-        }
-
-        // ── HTTP 200 ─────────────────────────────────────────────────────
-        if ($httpCode === 200) {
-            $successKeyword = 'btlintspeedday2go';
-            if (stripos($message, $successKeyword) !== false || stripos($message, 'successfully done') !== false) {
-                // تحقق من transaction-id
-                $txId = $fullData['transaction-id'] ?? null;
-                if ($txId === null && isset($fullData['message'])) {
-                    $inner = is_string($fullData['message']) ? @json_decode($fullData['message'], true) : $fullData['message'];
-                    if (is_array($inner)) $txId = $inner['transaction-id'] ?? null;
-                }
-                if (($txId !== null && $txId !== 'null') || stripos($message, 'successfully done') !== false) {
-                    clearPending($psid);
-                    sendMessage($psid,
-                        "⭐ تم تفعيل العرض بنجاح 🎁 للرقم {$displayMasked}\n" .
-                        "✅ اسم العرض: IMTIYAZ 70 🏷️\n" .
-                        "✅ حجم الانترنت: 4Go انترنت 🌐\n" .
-                        "✅ المدة: 24h ساعة ⏳\n\n" .
-                        "✅ لا تنسى متابعة حساب المطور </>\nhttps://www.facebook.com/Bendjara.Yacin\n\n" .
-                        "⚡ قناة التلقرام : https://t.me/tasjilbott"
-                    );
-                    sendMessage($psid,
-                        "🥰 الناس لي سجلت فالموقع شكرا لكم 🥰\n\n" .
-                        "🔴 ولي مزال يروح يدخل للموقع 👇\n\n" .
-                        "https://timebucks.com/?refID=227870531\n\n" .
-                        "✅ ويسجل بحساب جوجل وبس 🥰\n" .
-                        "هكا راكم دعموا فيا باه نستمر وشكرا"
-                    );
-                    clearSession($psid); sendMessage($psid, "📱 أرسل رقم هاتفك للبدء من جديد."); return;
-                }
-            }
-            // 200 بدون تأكيد نجاح → أعد المحاولة مثل Python
+            // 200 بدون تأكيد → أعد المحاولة
             usleep(1000000);
             continue;
         }
@@ -804,8 +805,74 @@ function doSubscriptionCurl(string $url, string $payload, string $token, string 
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// Refresh Token
+// activateProductCurl — Endpoint الجديد: /api/v1/subscribers/activate-product
+// يُعيد ['http_code'=>int, 'json'=>array|null, 'body'=>string] أو null
 // ════════════════════════════════════════════════════════════════════════════
+
+function activateProductCurl(string $msisdn, string $accessToken, string $jsonPayload, string $logTag): ?array
+{
+    $url     = "https://apim.djezzy.dz/mobile-api/api/v1/subscribers/activate-product/{$msisdn}";
+    $proxies = loadProxies();
+    $result  = null;
+
+    foreach ($proxies as $p) {
+        $pp = parseProxy($p);
+        $result = doActivateProductCurl($url, $jsonPayload, $accessToken, $pp['host'], $pp['userpass'], $logTag);
+        if ($result !== null) return $result;
+    }
+    foreach (refreshProxies() as $p) {
+        $pp = parseProxy($p);
+        $result = doActivateProductCurl($url, $jsonPayload, $accessToken, $pp['host'], $pp['userpass'], $logTag);
+        if ($result !== null) return $result;
+    }
+    return null;
+}
+
+function doActivateProductCurl(string $url, string $payload, string $token, string $proxyHost, string $proxyAuth, string $tag): ?array
+{
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => $payload,
+        CURLOPT_HTTPHEADER     => [
+            'Content-Type: application/json',
+            'Accept: application/json',
+            'Accept-Encoding: gzip',
+            'accept-language: fr',
+            "authorization: Bearer {$token}",
+            'User-Agent: MobileApp/3.0.0',
+        ],
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_ENCODING       => 'gzip',
+        CURLOPT_TIMEOUT        => 10,
+        CURLOPT_CONNECTTIMEOUT => 5,
+        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_PROXY          => $proxyHost,
+        CURLOPT_PROXYUSERPWD   => $proxyAuth,
+        CURLOPT_PROXYTYPE      => CURLPROXY_HTTP,
+        CURLOPT_FOLLOWLOCATION => true,
+    ]);
+
+    $body     = curl_exec($ch);
+    $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $errno    = curl_errno($ch);
+    $error    = curl_error($ch);
+    curl_close($ch);
+
+    file_put_contents('/tmp/activate70.log',
+        date('Y-m-d H:i:s') . " [{$tag}] http={$httpCode} err={$error} body=" . substr((string)$body, 0, 600) . "\n",
+        FILE_APPEND);
+
+    if ($errno || $body === false || $httpCode === 0) return null;
+
+    $bodyStr = (string)$body;
+    $json    = @json_decode($bodyStr, true);
+    if (is_array($json)) return ['http_code' => $httpCode, 'json' => $json, 'body' => $bodyStr];
+
+    return ['http_code' => $httpCode, 'json' => ['raw' => $bodyStr], 'body' => $bodyStr];
+}
+
+
 
 function refreshAccessToken(string $refreshToken, string $msisdn, string $psid): mixed
 {
@@ -831,7 +898,7 @@ function refreshAccessToken(string $refreshToken, string $msisdn, string $psid):
 function refreshTokenRequest(string $refreshToken, string $proxyHost, string $proxyAuth): mixed
 {
     $r = djezzyCurl('https://apim.djezzy.dz/oauth2/token',
-        http_build_query(['scope' => 'openid', 'client_secret' => 'MVpXHW_ImuMsxKIwrJpoVVMHjRsa', 'client_id' => '6E6CwTkp8H1CyQxraPmcEJPQ7xka', 'grant_type' => 'refresh_token', 'refresh_token' => $refreshToken]),
+        http_build_query(['scope' => 'djezzyAppV2', 'client_secret' => 'uf82p68Bgisp8Yg1Uz8Pf6_v1XYa', 'client_id' => '87pIExRhxBb3_wGsA5eSEfyATloa', 'grant_type' => 'refresh_token', 'refresh_token' => $refreshToken]),
         $proxyHost, $proxyAuth, 'refresh');
     if ($r === 'html' || $r === false) return $r;
     $json = @json_decode($r['body'], true);
@@ -925,7 +992,7 @@ function parseProxy(string $proxy): array
 
 function sendDjezzyOTP(string $msisdn): bool
 {
-    $q = http_build_query(['scope'=>'smsotp','client_id'=>'6E6CwTkp8H1CyQxraPmcEJPQ7xka','msisdn'=>$msisdn]);
+    $q = http_build_query(['scope'=>'smsotp','client_id'=>'87pIExRhxBb3_wGsA5eSEfyATloa','msisdn'=>$msisdn]);
     foreach (array_merge(loadProxies(), refreshProxies()) as $p) {
         $pp=parseProxy($p);
         if (djezzyCurl('https://apim.djezzy.dz/oauth2/registration',$q,$pp['host'],$pp['userpass'],'otp')===true) return true;
@@ -946,7 +1013,7 @@ function verifyOTP(string $msisdn, string $otp): mixed
 function djezzyTokenReq(string $msisdn, string $otp, string $ph, string $pa): mixed
 {
     $r=djezzyCurl('https://apim.djezzy.dz/oauth2/token',
-        http_build_query(['scope'=>'openid','client_secret'=>'MVpXHW_ImuMsxKIwrJpoVVMHjRsa','client_id'=>'6E6CwTkp8H1CyQxraPmcEJPQ7xka','otp'=>$otp,'mobileNumber'=>$msisdn,'grant_type'=>'mobile']),
+        http_build_query(['scope'=>'djezzyAppV2','client_secret'=>'uf82p68Bgisp8Yg1Uz8Pf6_v1XYa','client_id'=>'87pIExRhxBb3_wGsA5eSEfyATloa','otp'=>$otp,'mobileNumber'=>$msisdn,'grant_type'=>'mobile']),
         $ph,$pa,'token');
     if ($r==='html'||$r===false) return false;
     $json=@json_decode($r['body'],true);
