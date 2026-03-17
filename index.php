@@ -906,7 +906,7 @@ function loadProxies(): array
     "https://change4.owlproxy.com:7778:u7eohVR1Fv50_custom_zone_DZ_st__city_sid_15191711_time_5:2491326",
     "https://change4.owlproxy.com:7778:RKGEFZM08A00_custom_zone_DZ_st__city_sid_24966343_time_5:2491333",
     "https://change4.owlproxy.com:7778:uo3QTuYrxv10_custom_zone_DZ_st__city_sid_15907504_time_5:2491340"
-]
+];
 }
 
 function refreshProxies(): array
