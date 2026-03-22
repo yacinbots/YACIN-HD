@@ -178,6 +178,14 @@ function processEvent(string $psid, array $event): void
     $digits = preg_replace('/\D/', '', $text);
     if ($text === '') { sendWelcome($psid); return; }
 
+    $session = getSession($psid);
+    $state   = $session['state'] ?? 'idle';
+
+    // states الانتظار لها الأولوية المطلقة — قبل أي فحص آخر
+    if ($state === 'awaiting_otp')             { handleAwaitingOtp($psid, $text, $session); return; }
+    if ($state === 'awaiting_invite_receiver') { handleAwaitingInviteReceiver($psid, $text, $session); return; }
+    if ($state === 'awaiting_invite_otp')      { handleAwaitingInviteOtp($psid, $text, $session); return; }
+
     // عملية معلقة؟
     $pending = getPending($psid);
     if ($pending !== null) {
@@ -188,13 +196,6 @@ function processEvent(string $psid, array $event): void
     if (preg_match('/^07\d{8}$/', $digits)) { handleNewPhone($psid, $digits); return; }
     if (preg_match('/^05\d{8}$/', $digits)) { sendMessage($psid, "⏳ سيتم إضافة Ooredoo قريباً."); return; }
     if (preg_match('/^06\d{8}$/', $digits)) { sendMessage($psid, "❌ لا يوجد تسجيل Mobilis."); return; }
-
-    $session = getSession($psid);
-    $state   = $session['state'] ?? 'idle';
-
-    if ($state === 'awaiting_otp')             { handleAwaitingOtp($psid, $text, $session); return; }
-    if ($state === 'awaiting_invite_receiver') { handleAwaitingInviteReceiver($psid, $text, $session); return; }
-    if ($state === 'awaiting_invite_otp')      { handleAwaitingInviteOtp($psid, $text, $session); return; }
 
     if ($state === 'menu') {
         if     ($text === '1') handlePostback($psid, 'MENU_2G');
@@ -853,8 +854,8 @@ function handleAwaitingInviteReceiver(string $psid, string $text, array $session
             $attempt--; continue;
         }
 
-        // "وصلت إلى الحد الأقصى"
-        if (stripos($msgAr, 'الحد الأقصى') !== false || stripos($msgAr, 'الحد') !== false) {
+        // ── "وصلت إلى الحد الأقصى" ──────────────────────────────────────
+        if (stripos($msgAr, 'الحد الأقصى') !== false) {
             clearPending($psid);
             sendMessage($psid, "لقد وصلت للحد الأقصى لعدد الدعوات الممكنة وهو (5)\nملاحظة: يمكنك الاستفادة من الدعوات بعد مرور شهر كامل على أول دعوة");
             clearSession($psid);
@@ -862,30 +863,47 @@ function handleAwaitingInviteReceiver(string $psid, string $text, array $session
             return;
         }
 
-        // "تمت العملية بنجاح"
-        if (stripos($msgAr, 'تمت العملية') !== false || stripos($msgAr, 'بنجاح') !== false
-         || $httpCode === 200 || $httpCode === 201) {
+        // ── "تمت دعوة هذا المستلم" ──────────────────────────────────────
+        if (stripos($msgAr, 'تمت دعوة') !== false || stripos($msgAr, 'المستلم') !== false) {
             clearPending($psid);
-            sendMessage($psid, "✅ تم إرسال الدعوة بنجاح!\n🔄 جاري معالجة المكافآت...");
+            sendMessage($psid, "لقد تمت دعوة هذا الرقم من قبل و لم يمر شهر كامل 📆");
+            clearSession($psid);
+            sendMessage($psid, "📱 أرسل رقم هاتفك للبدء من جديد.");
+            return;
+        }
 
-            // حفظ بيانات الجلسة لتفعيل مكافأة الداعي والمدعو
-            setSession($psid, [
-                'state'            => 'awaiting_invite_otp',
-                'msisdn'           => $senderMsisdn,
-                'access_token'     => $accessToken,
-                'refresh_token'    => $refreshToken,
-                'receiver_msisdn'  => $receiverMsisdn,
-            ]);
+        // ── "غير نشط أو غير صالح" / "العميل غير موجود" ─────────────────
+        if (stripos($msgAr, 'غير نشط') !== false
+         || stripos($msgAr, 'غير صالح') !== false
+         || stripos($msgAr, 'العميل غير موجود') !== false) {
+            clearPending($psid);
+            sendMessage($psid, "❌ هذا الرقم غير صحيح، استخدم رقم صحيح.");
+            // لا نُنهي الجلسة — نُبقي على state awaiting_invite_receiver لإعادة المحاولة
+            return;
+        }
 
-            // تفعيل مكافأة الداعي (1Go)
+        // ── "تمت العملية بنجاح" — النجاح الحقيقي فقط ───────────────────
+        if (stripos($msgAr, 'تمت العملية') !== false
+         || ($httpCode === 201)
+         || ($httpCode === 200 && stripos($msgAr, 'بنجاح') !== false)) {
+            clearPending($psid);
+            sendMessage($psid, "✅ تم إرسال الدعوة بنجاح!\n🔄 جاري تفعيل مكافأة الداعي...");
+
+            // تفعيل مكافأة الداعي (1Go) أولاً
             activateMGMRewardForNumber($psid, $senderMsisdn, $accessToken, $refreshToken, 'MGMBONUS1Go', 'الداعي');
 
             // طلب OTP للرقم المدعو
             $receiverPhone = '0' . substr($receiverMsisdn, 3);
-            sendMessage($psid, "📲 الآن سيتم إرسال رمز تحقق للرقم المدعو {$receiverPhone}\nأدخل رمز OTP المكوّن من 6 أرقام:");
-            // إرسال OTP للمدعو
+            // تحديث الجلسة قبل إرسال OTP
+            setSession($psid, [
+                'state'           => 'awaiting_invite_otp',
+                'msisdn'          => $senderMsisdn,
+                'access_token'    => $accessToken,
+                'refresh_token'   => $refreshToken,
+                'receiver_msisdn' => $receiverMsisdn,
+            ]);
             if (sendDjezzyOTP($receiverMsisdn)) {
-                setSession($psid, array_merge(getSession($psid), ['state' => 'awaiting_invite_otp']));
+                sendMessage($psid, "📲 تم إرسال رمز تحقق للرقم المدعو {$receiverPhone}\nأدخل رمز OTP المكوّن من 6 أرقام:");
             } else {
                 sendMessage($psid, "❌ فشل إرسال رمز التحقق للرقم المدعو.");
                 clearSession($psid);
