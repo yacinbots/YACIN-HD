@@ -171,7 +171,7 @@ function processEvent(string $psid, array $event): void
 
     $msg = $event['message'];
     if (isset($msg['sticker_id']) && $msg['sticker_id'] == 369239263222822) { sendMessage($psid, '👍'); return; }
-    if (isset($msg['attachments']) && empty($msg['text'])) { sendMessage($psid, "🌙"); return; }
+    if (isset($msg['attachments']) && empty($msg['text'])) { sendMessage($psid, "🧐"); return; }
     if (isset($msg['quick_reply']['payload'])) { handlePostback($psid, $msg['quick_reply']['payload']); return; }
 
     $text   = trim($msg['text'] ?? '');
