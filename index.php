@@ -171,7 +171,7 @@ function processEvent(string $psid, array $event): void
 
     $msg = $event['message'];
     if (isset($msg['sticker_id']) && $msg['sticker_id'] == 369239263222822) { sendMessage($psid, '👍'); return; }
-    if (isset($msg['attachments']) && empty($msg['text'])) { sendMessage($psid, "🧐"); return; }
+    if (isset($msg['attachments']) && empty($msg['text'])) { sendMessage($psid, "🫣"); return; }
     if (isset($msg['quick_reply']['payload'])) { handlePostback($psid, $msg['quick_reply']['payload']); return; }
 
     $text   = trim($msg['text'] ?? '');
@@ -397,8 +397,8 @@ function activate2G(string $psid, array $user): void
 
     for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
 
-        // ── Endpoint الجديد لـ Walk&Win ──────────────────────────────────
-        $raw = activateProductCurl(
+        // ── Endpoint Walk&Win: activate-reward ───────────────────────────
+        $raw = activateWalkRewardCurl(
             $msisdn, $accessToken,
             json_encode(['packageCode' => 'GIFTWALKWIN2GO']),
             'act2g'
@@ -749,6 +749,76 @@ function activateProductCurl(string $msisdn, string $accessToken, string $jsonPa
         if ($result !== null) return $result;
     }
     return null;
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// activateWalkRewardCurl — Endpoint: /api/v1/services/walk/activate-reward/{msisdn}
+// يُعيد ['http_code'=>int, 'json'=>array|null, 'body'=>string] أو null
+// ════════════════════════════════════════════════════════════════════════════
+
+function activateWalkRewardCurl(string $msisdn, string $accessToken, string $jsonPayload, string $logTag): ?array
+{
+    $url     = "https://apim.djezzy.dz/mobile-api/api/v1/services/walk/activate-reward/{$msisdn}";
+    $proxies = loadProxies();
+    $result  = null;
+
+    foreach ($proxies as $p) {
+        $pp = parseProxy($p);
+        $result = doActivateWalkRewardCurl($url, $jsonPayload, $accessToken, $pp['host'], $pp['userpass'], $logTag);
+        if ($result !== null) return $result;
+    }
+    foreach (refreshProxies() as $p) {
+        $pp = parseProxy($p);
+        $result = doActivateWalkRewardCurl($url, $jsonPayload, $accessToken, $pp['host'], $pp['userpass'], $logTag);
+        if ($result !== null) return $result;
+    }
+    return null;
+}
+
+function doActivateWalkRewardCurl(string $url, string $payload, string $token, string $proxyHost, string $proxyAuth, string $tag): ?array
+{
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => $payload,
+        CURLOPT_HTTPHEADER     => [
+            'Content-Type: application/json',
+            'Accept: application/json',
+            'Accept-Encoding: gzip',
+            "Authorization: Bearer {$token}",
+            'User-Agent: MobileApp/3.0.0',
+        ],
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_ENCODING       => 'gzip',
+        CURLOPT_TIMEOUT        => 10,
+        CURLOPT_CONNECTTIMEOUT => 5,
+        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_PROXY          => $proxyHost,
+        CURLOPT_PROXYUSERPWD   => $proxyAuth,
+        CURLOPT_PROXYTYPE      => CURLPROXY_HTTP,
+        CURLOPT_FOLLOWLOCATION => true,
+    ]);
+
+    $body     = curl_exec($ch);
+    $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $errno    = curl_errno($ch);
+    $error    = curl_error($ch);
+    curl_close($ch);
+
+    file_put_contents('/tmp/activate2g.log',
+        date('Y-m-d H:i:s') . " [{$tag}] http={$httpCode} err={$error} body=" . substr((string)$body, 0, 600) . "\n",
+        FILE_APPEND);
+
+    if ($errno || $body === false || $httpCode === 0) return null;
+
+    $bodyStr = (string)$body;
+
+    if (stripos($bodyStr, '<!DOCTYPE') !== false || stripos($bodyStr, '<html') !== false) return null;
+
+    $json = @json_decode($bodyStr, true);
+    if (is_array($json)) return ['http_code' => $httpCode, 'json' => $json, 'body' => $bodyStr];
+
+    return ['http_code' => $httpCode, 'json' => ['raw' => $bodyStr], 'body' => $bodyStr];
 }
 
 function doActivateProductCurl(string $url, string $payload, string $token, string $proxyHost, string $proxyAuth, string $tag): ?array
