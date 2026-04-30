@@ -4,7 +4,7 @@
 // CONFIG
 // ════════════════════════════════════════════════════════════════════════════
 
-define('FB_TOKEN',        'EAAFYLlWaXQkBRWiaA6Na2MIDZBAFzF0YkjEdkLJYlcvslCvThFZBAupi7hBFjIQZCwjD3THUqxisUB7YvTyC4KNk8jEflOBHRlGX7hJpZCpqqpOVWd1gwuYDenY9JFZAEiftk30KUf29ZBGpknnT5kUTLoQsZBtdJ8bL1HGhhGdZAfVlJ0nuVnVRuZBqK9g7HPKGkuM9fuQZDZD');
+define('FB_TOKEN',        'EAARmCi5xUb4BRYxt81Qqkgo9Uj85adG3SIsjEXRGc9XH9yovSLcLq8dlOcqZCeYJD04HiNvSNWjKvfkXPJMQEQggNiP2TmwnGx1PgLlZAjEd8WKcZBdGLZAPr71A0nA1zNxiLP4s8DRyhSt67p37arn5AgTBYgQc1Ue6RJ4pjX5SRZBJEs6Sk4X8ZBPmclKABzbZBMhjAZDZD');
 define('VERIFY_TOKEN',    'Yacin');
 define('PROXY_LIST_FILE', '/tmp/proxies.json');
 define('PROXY_API_URL',   'https://dev-bendjarayacine.pantheonsite.io/wp-admin/maint/proxy.json');
