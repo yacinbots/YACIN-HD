@@ -475,7 +475,7 @@ function activate2G(string $psid, array $user): void
                 sendMessage($psid,
                     "🥰 الناس لي سجلت فالموقع شكرا لكم 🥰\n\n" .
                     "🔴 ولي مزال يروح يدخل للموقع 👇\n\n" .
-                    "https://timebucks.com/?refID=227870531\n\n" .
+                    "https://timebucks.com/?refID=228677688\n\n" .
                     "✅ ويسجل بحساب جوجل وبس 🥰\n" .
                     "هكا راكم دعموا فيا باه نستمر وشكرا"
                 );
@@ -616,7 +616,7 @@ function activate70DZ(string $psid, array $user): void
                 sendMessage($psid,
                     "🥰 الناس لي سجلت فالموقع شكرا لكم 🥰\n\n" .
                     "🔴 ولي مزال يروح يدخل للموقع 👇\n\n" .
-                    "https://timebucks.com/?refID=227870531\n\n" .
+                    "https://timebucks.com/?refID=228677688\n\n" .
                     "✅ ويسجل بحساب جوجل وبس 🥰\n" .
                     "هكا راكم دعموا فيا باه نستمر وشكرا"
                 );
