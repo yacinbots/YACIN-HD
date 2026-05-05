@@ -2,7 +2,7 @@
 
 // التحقق من Webhook
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
-    $verify_token = "VERIFY_TOKEN";
+    $verify_token = "Yacin";
     if ($_GET['hub_verify_token'] === $verify_token) {
         echo $_GET['hub_challenge'];
         exit;
