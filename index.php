@@ -1,16 +1,19 @@
 <?php
+// تحديد البوت المطلوب
+$bot = $_GET['bot'] ?? 'bot1';
 
-if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+/*
+ * توجيه الطلبات إلى ملفات البوتات
+ * بدون تعديل أي ملف بوت (مثل bot1.php)
+ */
+switch ($bot) {
 
-    $mode = $_GET['hub_mode'] ?? '';
-    $token = $_GET['hub_verify_token'] ?? '';
-    $challenge = $_GET['hub_challenge'] ?? '';
+    case 'bot1':
+        require __DIR__ . '/bot1.php';
+        break;
 
-    if ($mode === 'subscribe' && $token === 'Yacin') {
-        echo $challenge;
-        exit;
-    } else {
-        echo "Verification failed";
-        exit;
-    }
+    default:
+        http_response_code(404);
+        echo "Bot not found";
+        break;
 }
