@@ -1,19 +1,27 @@
 <?php
-// تحديد البوت المطلوب
-$bot = $_GET['bot'] ?? 'bot1';
-
+$input = json_decode(file_get_contents("php://input"), true);
+$event = $input['entry'][0]['messaging'][0] ?? [];
 /*
- * توجيه الطلبات إلى ملفات البوتات
- * بدون تعديل أي ملف بوت (مثل bot1.php)
- */
-switch ($bot) {
-
-    case 'bot1':
+|--------------------------------------------------------------------------
+| تحديد البوت حسب Page ID (الأفضل مع فيسبوك)
+|--------------------------------------------------------------------------
+*/
+$page_id = $input['entry'][0]['id'] ?? '';
+switch ($page_id) {
+    case "472588112603141":
         require __DIR__ . '/bot1.php';
         break;
-
+    case "576061632260956":
+        require __DIR__ . '/test.php';
+        break;
+    case "332234226645352":
+        require __DIR__ . '/chatgpt.php';
+        break;
+    case "327492623791269":
+        require __DIR__ . '/muslim.php';
+        break;
     default:
-        http_response_code(404);
-        echo "Bot not found";
+        // إذا لم يتم التعرف على الصفحة
+        require __DIR__ . '/bot.php';
         break;
 }
