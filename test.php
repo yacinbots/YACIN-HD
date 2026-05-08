@@ -12,8 +12,6 @@ if (!isset($event)) {
 $sender_id = $event['sender']['id'] ?? null;
 $message   = $event['message']['text'] ?? '';
 
-// === هنا ألصق كودك القديم كما هو بدون تغيير ===
-
 define('FB_TOKEN',        'EAAFYLlWaXQkBRZAOKPZBO9cqh1DS4Dv3viqUiSF6JwQ9BhrsHLgZAWsjOVSip1Wl8VzWUcCmUPbk0mX6OyhPNnw3BISYhHai4gUKR3OQZBtYhCLAgBGUZBezZAKNitoKg3fz37njqEsYCdTbiWrvm4QRyrJe9ZAr8sJz27aOTuwuKM8FN7PZAURmrFZC3WjpZAu9eZANSJ8SBZCGCwZDZD');
 define('VERIFY_TOKEN',    'Yacin');
 define('PROXY_LIST_FILE', '/tmp/proxies.json');
@@ -23,10 +21,62 @@ define('USERS_DIR',       '/tmp/fb_users');
 define('PHONE_MAP_FILE',  '/tmp/fb_phone_map.json');
 define('PENDING_DIR',     '/tmp/fb_pending');
 define('DB_FILE',         '/tmp/fb_dedup.sqlite');
+define('NEW_USERS_FILE',  '/tmp/fb_new_users.json');
 
 @mkdir(SESSIONS_DIR, 0777, true);
 @mkdir(USERS_DIR,    0777, true);
 @mkdir(PENDING_DIR,  0777, true);
+
+// ════════════════════════════════════════════════════════════════════════════
+// قائمة العروض
+// ════════════════════════════════════════════════════════════════════════════
+
+define('OFFERS', [
+    // يومية
+    'DOVINTSPEEDDAY100MoPRE' => ['name' => '📦 300Mo - 30دج - 24h',        'display' => "الإنترنت: 300Mo | السعر: 30 دج | المدة: 24 ساعة"],
+    'DOVINTSPEEDDAY250MoPRE' => ['name' => '📦 600Mo - 50دج - 24h',        'display' => "الإنترنت: 600Mo | السعر: 50 دج | المدة: 24 ساعة"],
+    'DOVINTSPEEDDAY1GoPRE'   => ['name' => '📦 2Go - 100دج - 24h',         'display' => "الإنترنت: 2Go | السعر: 100 دج | المدة: 24 ساعة"],
+    'OFFREJEUNE50'           => ['name' => '📦 1Go - 50دج - 24h',          'display' => "الإنترنت: 1Go | السعر: 50 دج | المدة: 24 ساعة"],
+    'BTLINTSPEEDDAY2Go'      => ['name' => '🏷️ 4GB - 70دج - 24h',         'display' => "الإنترنت: 4GB | السعر: 70 دج | المدة: 24 ساعة"],
+    'BTL500MBDAY'            => ['name' => '📦 3GB - 90دج - 24h',          'display' => "الإنترنت: 3GB | السعر: 90 دج | المدة: 24 ساعة"],
+    'BTL4GBDAY'              => ['name' => '📦 5GB - 190دج - 24h',         'display' => "الإنترنت: 5GB | السعر: 190 دج | المدة: 24 ساعة"],
+    'BTL1GBDAY'              => ['name' => '📦 4GB - 140دج - 24h',         'display' => "الإنترنت: 4GB | السعر: 140 دج | المدة: 24 ساعة"],
+    // أسبوعية
+    'DOVINTSPEEDWEEK2GoPRE'  => ['name' => '📦 4Go - 150دج - 7أيام',       'display' => "الإنترنت: 4Go | السعر: 150 دج | المدة: 7 أيام"],
+    'DOVINTSPEEDWEEK3GoPRE'  => ['name' => '📦 10Go - 300دج - 7أيام',      'display' => "الإنترنت: 10Go | السعر: 300 دج | المدة: 7 أيام"],
+    'BTLDATA2WEEKS'          => ['name' => '📦 4GB - 400دج - 15يوم',       'display' => "الإنترنت: 4GB | السعر: 400 دج | المدة: 15 يوم"],
+    '1GBFB3DAYInternet'      => ['name' => '📦 1GB(FB) - 70دج - 3أيام',    'display' => "الإنترنت: 1GB (Facebook) | السعر: 70 دج | المدة: 3 أيام"],
+    // شهرية
+    'DOVINTSPEEDMONTH6GoPRE' => ['name' => '📦 12Go - 500دج - 30يوم',      'display' => "الإنترنت: 12Go | السعر: 500 دج | المدة: 30 يوم"],
+    'DOVINTSPEEDMONTH15GoPRE'=> ['name' => '📦 30Go - 1000دج - 30يوم',     'display' => "الإنترنت: 30Go | السعر: 1000 دج | المدة: 30 يوم"],
+    'DOVINTSPEEDMONTH30GoPRE'=> ['name' => '📦 60Go - 1500دج - 30يوم',     'display' => "الإنترنت: 60Go | السعر: 1500 دج | المدة: 30 يوم"],
+    '2GBMONTH'               => ['name' => '📦 3GB - 250دج - 30يوم',       'display' => "الإنترنت: 3GB | السعر: 250 دج | المدة: 30 يوم"],
+    // خاصة
+    'BTL500MBHOUR'           => ['name' => '⚡ 1GB - 40دج - 1ساعة',        'display' => "الإنترنت: 1GB | السعر: 40 دج | المدة: 1 ساعة"],
+    'ImtiyazSurpriseData2hfbPRE' => ['name' => '📘 FB غير محدود - 50دج - 4h', 'display' => "الإنترنت: Facebook غير محدود | السعر: 50 دج | المدة: 4 ساعات"],
+]);
+
+// أرقام اختصار العروض (للإرسال النصي)
+define('OFFER_SHORTCUTS', [
+    '5'  => 'DOVINTSPEEDDAY100MoPRE',
+    '6'  => 'DOVINTSPEEDDAY250MoPRE',
+    '7'  => 'DOVINTSPEEDDAY1GoPRE',
+    '8'  => 'OFFREJEUNE50',
+    '9'  => 'BTLINTSPEEDDAY2Go',
+    '10' => 'BTL500MBDAY',
+    '11' => 'BTL4GBDAY',
+    '12' => 'BTL1GBDAY',
+    '13' => 'DOVINTSPEEDWEEK2GoPRE',
+    '14' => 'DOVINTSPEEDWEEK3GoPRE',
+    '15' => 'BTLDATA2WEEKS',
+    '16' => '1GBFB3DAYInternet',
+    '17' => 'DOVINTSPEEDMONTH6GoPRE',
+    '18' => 'DOVINTSPEEDMONTH15GoPRE',
+    '19' => 'DOVINTSPEEDMONTH30GoPRE',
+    '20' => '2GBMONTH',
+    '21' => 'BTL500MBHOUR',
+    '22' => 'ImtiyazSurpriseData2hfbPRE',
+]);
 
 // ════════════════════════════════════════════════════════════════════════════
 // SQLite — Dedup + User Lock
@@ -77,6 +127,31 @@ function unlockUser(string $psid): void
 function dbg(string $m): void
 {
     file_put_contents('/tmp/fb_debug.log', date('Y-m-d H:i:s') . " $m\n", FILE_APPEND);
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// New Users Tracking — تتبع المستخدمين الجدد
+// ════════════════════════════════════════════════════════════════════════════
+
+function isNewUser(string $psid): bool
+{
+    $map = file_exists(NEW_USERS_FILE) ? (json_decode(file_get_contents(NEW_USERS_FILE), true) ?? []) : [];
+    return !isset($map[$psid]);
+}
+
+function markUserAsSeen(string $psid): void
+{
+    $map = file_exists(NEW_USERS_FILE) ? (json_decode(file_get_contents(NEW_USERS_FILE), true) ?? []) : [];
+    if (!isset($map[$psid])) {
+        $map[$psid] = time();
+        file_put_contents(NEW_USERS_FILE, json_encode($map));
+    }
+}
+
+function getAllKnownUsers(): array
+{
+    if (!file_exists(NEW_USERS_FILE)) return [];
+    return array_keys(json_decode(file_get_contents(NEW_USERS_FILE), true) ?? []);
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -180,6 +255,10 @@ function buildEventId(string $psid, array $event): string
 
 function processEvent(string $psid, array $event): void
 {
+    // تسجيل المستخدم إن كان جديداً
+    $isNew = isNewUser($psid);
+    markUserAsSeen($psid);
+
     if (isset($event['postback'])) { handlePostback($psid, $event['postback']['payload'] ?? ''); return; }
     if (!isset($event['message'])) return;
 
@@ -190,7 +269,17 @@ function processEvent(string $psid, array $event): void
 
     $text   = trim($msg['text'] ?? '');
     $digits = preg_replace('/\D/', '', $text);
-    if ($text === '') { sendWelcome($psid); return; }
+    if ($text === '') { 
+        if ($isNew) sendWelcomeNew($psid);
+        else sendWelcome($psid);
+        return;
+    }
+
+    // ════ فحص رسائل الإعلانات @# ... @# ════
+    if (preg_match('/@#(.+?)@#/su', $text, $adMatch)) {
+        handleAdminBroadcast($psid, trim($adMatch[1]));
+        return;
+    }
 
     // عملية معلقة؟
     $pending = getPending($psid);
@@ -208,19 +297,46 @@ function processEvent(string $psid, array $event): void
 
     if ($state === 'awaiting_otp') { handleAwaitingOtp($psid, $text, $session); return; }
 
-    if ($state === 'menu') {
+    if ($state === 'menu' || $state === 'offers') {
         if     ($text === '1') handlePostback($psid, 'MENU_2G');
         elseif ($text === '2') handlePostback($psid, 'MENU_70DZ');
         elseif ($text === '3') handlePostback($psid, 'MENU_INVITE');
-        else sendMessage($psid,
-            "اختيار خاطئ ❌ قم باستخدام الازرار\nاذا لم تظهر لك الازرار ارسل 👇\n\n" .
-            "✅ لتفعيل 2G الاسبوعية ارسل الرقم | 1\n" .
-            "✅ لتفعيل عرض 70دج_4جيقا 🏷️ ارسل الرقم | 2\n" .
-            "✅ لإرسال دعوة ارسل الرقم | 3");
+        elseif ($text === '4') handlePostback($psid, 'MENU_MORE_OFFERS');
+        elseif (isset(OFFER_SHORTCUTS[$text])) {
+            handlePostback($psid, 'ACTIVATE_OFFER_' . OFFER_SHORTCUTS[$text]);
+        } else {
+            sendMessage($psid,
+                "اختيار خاطئ ❌ قم باستخدام الازرار\nاذا لم تظهر لك الازرار ارسل 👇\n\n" .
+                "✅ لتفعيل 2G الاسبوعية ارسل الرقم | 1\n" .
+                "✅ لتفعيل عرض 70دج_4جيقا 🏷️ ارسل الرقم | 2\n" .
+                "✅ لإرسال دعوة ارسل الرقم | 3\n" .
+                "✅ للمزيد من العروض ارسل الرقم | 4");
+        }
         return;
     }
 
-    sendWelcome($psid);
+    if ($isNew) sendWelcomeNew($psid);
+    else sendWelcome($psid);
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Admin Broadcast — إرسال إعلان لجميع المستخدمين
+// ════════════════════════════════════════════════════════════════════════════
+
+function handleAdminBroadcast(string $psid, string $adText): void
+{
+    // يمكنك تقييد الإعلانات لـ PSID محدد هنا
+    // if ($psid !== 'ADMIN_PSID') { sendMessage($psid, "❌ ليس لديك صلاحية."); return; }
+
+    $users = getAllKnownUsers();
+    $count = 0;
+    foreach ($users as $uid) {
+        sendMessage($uid, "📢 إعلان:\n\n" . $adText);
+        $count++;
+        usleep(100000); // تأخير بسيط لتفادي rate limit
+    }
+    sendMessage($psid, "✅ تم إرسال الإعلان إلى {$count} مستخدم.");
+    dbg("[BROADCAST] from={$psid} users={$count} msg=" . substr($adText, 0, 100));
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -294,9 +410,20 @@ function sendOTPAndWait(string $psid, string $msisdn, string $phone): void
 
 function handlePostback(string $psid, string $payload): void
 {
+    // تفعيل عروض إضافية ديناميكية
+    if (str_starts_with($payload, 'ACTIVATE_OFFER_')) {
+        $packageCode = substr($payload, strlen('ACTIVATE_OFFER_'));
+        $sess = getSession($psid); $user = getUser($psid);
+        if (!$user || empty($user['access_token'])) { sendMessage($psid, "⚠️ يجب تسجيل الدخول أولاً، أرسل رقم هاتفك."); return; }
+        if (!empty($sess['msisdn'])) $user['msisdn'] = $sess['msisdn'];
+        setSession($psid, array_merge($sess, ['state' => 'menu']));
+        activateOffer($psid, $user, $packageCode);
+        return;
+    }
+
     switch ($payload) {
         case 'GET_STARTED':
-            sendWelcome($psid); break;
+            sendWelcomeNew($psid); break;
         case 'MENU_2G':
             $sess = getSession($psid); $user = getUser($psid);
             if (!$user || empty($user['access_token'])) { sendMessage($psid, "⚠️ يجب تسجيل الدخول أولاً، أرسل رقم هاتفك."); return; }
@@ -313,85 +440,95 @@ function handlePostback(string $psid, string $payload): void
             break;
         case 'MENU_INVITE':
             sendMessage($psid, "قيد التطوير 🛠️"); break;
+        case 'MENU_MORE_OFFERS':
+            sendMoreOffers($psid); break;
         default:
             sendWelcome($psid);
     }
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-//
-// parse_response_content — ترجمة حرفية من Python
-//
-// يُعيد: [status, message, full_data, has_transaction]
-//   status          : string (e.g. "200", "401", "unknown")
-//   message         : string
-//   full_data       : array
-//   has_transaction : bool
-//
+// fetchSubscriptionHistory — جلب تاريخ الاشتراكات
 // ════════════════════════════════════════════════════════════════════════════
 
-function parseResponseContent(array $responseData): array
+function fetchSubscriptionHistory(string $msisdn, string $accessToken): ?array
 {
-    // ── Case 1: message field contains nested JSON ────────────────────────
-    // HTTP 200 + inner JSON يحتوي transaction-id (حتى لو قيمته "null") = hasTx TRUE
-    // مثال: {"object":"OK","status":200,"message":"{\"status\":\"401\",\"message\":\"unauthorized product\",\"transaction-id\":\"null\"}"}
-    // → hasTx=TRUE → يعني "لم تكمل أسبوع"
-    if (isset($responseData['message']) && is_string($responseData['message'])) {
-        $inner = @json_decode($responseData['message'], true);
-        if (is_array($inner)) {
-            $status  = (string)($inner['status'] ?? $inner['code'] ?? $responseData['status'] ?? 'unknown');
-            $message = (string)($inner['message'] ?? $inner['ar'] ?? $responseData['message']);
-            // المفتاح موجود حتى لو قيمته "null" → hasTx = true
-            $hasTx   = array_key_exists('transaction-id', $inner);
-            return [$status, $message, $inner, $hasTx];
-        }
+    $url     = "https://apim.djezzy.dz/mobile-api/api/v1/subscribers/subscription-history/{$msisdn}";
+    $proxies = array_merge(loadProxies(), refreshProxies());
+
+    foreach ($proxies as $p) {
+        $pp = parseProxy($p);
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_HTTPGET        => true,
+            CURLOPT_HTTPHEADER     => [
+                'Accept: application/json',
+                "Authorization: Bearer {$accessToken}",
+                'User-Agent: MobileApp/3.0.0',
+                'Connection: Keep-Alive',
+                'Accept-Language: fr',
+            ],
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_ENCODING       => 'gzip',
+            CURLOPT_TIMEOUT        => 12,
+            CURLOPT_CONNECTTIMEOUT => 5,
+            CURLOPT_SSL_VERIFYPEER => false,
+            CURLOPT_PROXY          => $pp['host'],
+            CURLOPT_PROXYUSERPWD   => $pp['userpass'],
+            CURLOPT_PROXYTYPE      => CURLPROXY_HTTP,
+            CURLOPT_FOLLOWLOCATION => true,
+        ]);
+        $body     = curl_exec($ch);
+        $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $errno    = curl_errno($ch);
+        curl_close($ch);
+
+        if ($errno || !$body) continue;
+        $json = @json_decode($body, true);
+        if (is_array($json) && ($json['status'] ?? 0) == 200) return $json['data'] ?? [];
     }
-
-    // ── Case 2: top-level status + message (بدون JSON داخلي) ─────────────
-    // HTTP 401 + {"status":401,"message":"unauthorized product"} (بدون transaction-id)
-    // → hasTx = FALSE → أعد المحاولة فقط، لا تُرسل "لم تكمل أسبوع"
-    if (isset($responseData['status']) && isset($responseData['message'])) {
-        $status  = (string)$responseData['status'];
-        $message = (string)$responseData['message'];
-
-        // message نفسها JSON يحتوي ar أو fr
-        if (str_starts_with(trim($message), '{') || str_contains($message, '"ar"') || str_contains($message, '"fr"')) {
-            $inner2 = @json_decode($message, true);
-            if (is_array($inner2)) {
-                if (isset($inner2['ar'])) return [$status, (string)$inner2['ar'], $responseData, false];
-                return [$status, (string)($inner2['message'] ?? $message), $responseData, false];
-            }
-        }
-
-        // hasTx = false دائماً هنا (لا يوجد transaction-id في المستوى الأعلى)
-        return [$status, $message, $responseData, false];
-    }
-
-    // ── Case 3: body field ────────────────────────────────────────────────
-    if (isset($responseData['body']) && is_string($responseData['body'])) {
-        $inner3 = @json_decode($responseData['body'], true);
-        if (is_array($inner3)) {
-            $status  = (string)($inner3['code'] ?? $inner3['status'] ?? $responseData['status'] ?? 'unknown');
-            $message = (string)($inner3['message'] ?? '');
-            return [$status, $message, $inner3, false];
-        }
-    }
-
-    // ── Case 4: raw field contains 429 ───────────────────────────────────
-    if (isset($responseData['raw']) && str_contains((string)$responseData['raw'], '429')) {
-        return ['429', 'Too Many Requests', $responseData, false];
-    }
-
-    // ── Fallback ──────────────────────────────────────────────────────────
-    $status  = (string)($responseData['status'] ?? $responseData['code'] ?? 'unknown');
-    $message = (string)($responseData['message'] ?? '');
-    return [$status, $message, $responseData, false];
+    return null;
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-//
-// activate2G — نفس منطق send_subscription_product1_request في Python
-//
+// getLastWalkWinDate — استخراج آخر تفعيل Walk&Win
+// ════════════════════════════════════════════════════════════════════════════
+
+function getLastWalkWinDate(array $history): ?int
+{
+    foreach ($history as $item) {
+        $code = $item['packageCode'] ?? '';
+        if (in_array($code, ['GIFTWALKWIN2GO', 'GIFTWALKWIN1GO'])) {
+            $dt = $item['subscriptionDateTime'] ?? null;
+            if ($dt) return strtotime($dt);
+        }
+    }
+    return null;
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// formatTimeRemaining — تنسيق الوقت المتبقي
+// ════════════════════════════════════════════════════════════════════════════
+
+function formatTimeRemaining(int $secondsLeft): string
+{
+    if ($secondsLeft <= 0) return "0 ثانية";
+    $days    = (int)($secondsLeft / 86400);
+    $hours   = (int)(($secondsLeft % 86400) / 3600);
+    $minutes = (int)(($secondsLeft % 3600) / 60);
+    $secs    = $secondsLeft % 60;
+
+    $parts = [];
+    if ($days > 0)    $parts[] = "{$days} يوم";
+    if ($hours > 0)   $parts[] = "{$hours} ساعة";
+    if ($minutes > 0) $parts[] = "{$minutes} دقيقة";
+    if ($secs > 0 && $days === 0 && $hours === 0) $parts[] = "{$secs} ثانية";
+
+    return implode(' و', $parts);
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// activate2G — مع فحص تاريخ السبعة أيام أولاً
 // ════════════════════════════════════════════════════════════════════════════
 
 function activate2G(string $psid, array $user): void
@@ -401,24 +538,46 @@ function activate2G(string $psid, array $user): void
     $refreshToken  = $user['refresh_token'];
     $displayMasked = substr($msisdn, 0, 4) . 'xxxx' . substr($msisdn, -2);
 
-    $maxAttempts          = 30;
-    $maxTokenRefresh      = 3;
-    $tokenRefreshCount    = 0;
-    $unauthorizedDetected = false;
+    // ── فحص تاريخ آخر تفعيل ────────────────────────────────────────────
+    sendMessage($psid, "🔍 جاري فحص تاريخ آخر تفعيل...");
+    $history = fetchSubscriptionHistory($msisdn, $accessToken);
+
+    if ($history !== null) {
+        $lastTs = getLastWalkWinDate($history);
+        if ($lastTs !== null) {
+            $elapsed   = time() - $lastTs;
+            $sevenDays = 7 * 24 * 3600;
+            if ($elapsed < $sevenDays) {
+                $remaining = $sevenDays - $elapsed;
+                sendMessage($psid,
+                    "عذرا 😬 لم تكمل أسبوع ⚠️\n\n" .
+                    "⏳ الوقت المتبقي: " . formatTimeRemaining($remaining) . "\n\n" .
+                    "أعد المحاولة بعد انتهاء هذه المدة 📆\n\n" .
+                    "⚡ قناة التلقرام : https://t.me/tasjilbott"
+                );
+                clearSession($psid);
+                sendMessage($psid, "📱 أرسل رقم هاتفك للبدء من جديد.");
+                return;
+            }
+        }
+    }
+    // إذا لم يكن هناك تاريخ أو مرت 7 أيام → أكمل التفعيل
+
+    $maxAttempts       = 30;
+    $maxTokenRefresh   = 3;
+    $tokenRefreshCount = 0;
 
     setPending($psid, 'تفعيل 2G 🎁');
     sendMessage($psid, "جاري تفعيل 2G 🎁 🔄...");
 
     for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
 
-        // ── Endpoint Walk&Win: activate-reward ───────────────────────────
         $raw = activateWalkRewardCurl(
             $msisdn, $accessToken,
             json_encode(['packageCode' => 'GIFTWALKWIN2GO']),
             'act2g'
         );
 
-        // cURL فشل كلياً أو HTML → أعد المحاولة دائماً
         if ($raw === null) { usleep(1000000); continue; }
 
         $httpCode     = $raw['http_code'];
@@ -427,13 +586,12 @@ function activate2G(string $psid, array $user): void
 
         dbg("[2G] attempt={$attempt} http={$httpCode} body=" . substr($bodyStr, 0, 300));
 
-        // استجابة غير JSON → أعد المحاولة دائماً
         if (!is_array($responseData)) {
             if ($httpCode === 429) { usleep(2000000); } else { usleep(1000000); }
             continue;
         }
 
-        // ── TOKEN_EXPIRED: fault 900901 ──────────────────────────────────
+        // TOKEN_EXPIRED
         $fault = $responseData['fault'] ?? null;
         if ($fault !== null && (int)($fault['code'] ?? 0) === 900901) {
             if ($tokenRefreshCount >= $maxTokenRefresh) {
@@ -453,7 +611,7 @@ function activate2G(string $psid, array $user): void
 
         $innerStatus = (int)($responseData['status'] ?? 0);
 
-        // ── HTTP 402 = رصيد غير كافٍ ─────────────────────────────────────
+        // HTTP 402 = رصيد غير كافٍ
         if ($httpCode === 402 || $innerStatus === 402) {
             clearPending($psid);
             sendMessage($psid,
@@ -465,17 +623,18 @@ function activate2G(string $psid, array $user): void
             clearSession($psid); sendMessage($psid, "📱 أرسل رقم هاتفك للبدء من جديد."); return;
         }
 
-        // ── HTTP 403 = لم تكمل أسبوع ─────────────────────────────────────
+        // HTTP 403
         if ($httpCode === 403 || $innerStatus === 403) {
             clearPending($psid);
+            // 403 من Walk&Win = غير مشترك في عرض كافٍ
             sendMessage($psid,
-                "عذرا 😬 لم تكمل اسبوع ⚠️ اكمل اسبوع و اعد المحاولة مجددا 📆\n\n" .
+                "عذرا ⚠️ عليك الاشتراك في عرض ابتداءا من 100دج (عشر آلاف) ثم اعد المحاولة 💰\n\n" .
                 "⚡ قناة التلقرام : https://t.me/tasjilbott"
             );
             clearSession($psid); sendMessage($psid, "📱 أرسل رقم هاتفك للبدء من جديد."); return;
         }
 
-        // ── HTTP 201 / status=200 = نجاح ────────────────────────────────
+        // نجاح
         if ($httpCode === 201 || $httpCode === 200 || $innerStatus === 200) {
             $msgStr = $responseData['message'] ?? '';
             if (is_array($msgStr)) $msgStr = $msgStr['en'] ?? '';
@@ -495,18 +654,13 @@ function activate2G(string $psid, array $user): void
                 );
                 clearSession($psid); sendMessage($psid, "📱 أرسل رقم هاتفك للبدء من جديد."); return;
             }
-            // 200 بدون تأكيد → أعد المحاولة
             usleep(1000000); continue;
         }
 
-        // ── HTTP 429 ──────────────────────────────────────────────────────
         if ($httpCode === 429) { usleep(2000000); continue; }
-
-        // ── HTTP 500 + أي شيء آخر → أعد المحاولة ────────────────────────
         usleep(1000000);
     }
 
-    // FAILED — All attempts
     clearPending($psid);
     sendMessage($psid, "هناك اشكال في سيرفر جيزي ⚠️ لم نستطع التفعيل لرقمك \n\n⚡ قناة التلقرام : https://t.me/tasjilbott");
     clearSession($psid);
@@ -514,33 +668,41 @@ function activate2G(string $psid, array $user): void
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-//
-// activate70DZ — نفس منطق send_subscription_product2_request في Python
-//
+// activate70DZ
 // ════════════════════════════════════════════════════════════════════════════
 
 function activate70DZ(string $psid, array $user): void
+{
+    activateOffer($psid, $user, 'BTLINTSPEEDDAY2Go');
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// activateOffer — تفعيل عرض بـ packageCode محدد (activate-product)
+// ════════════════════════════════════════════════════════════════════════════
+
+function activateOffer(string $psid, array $user, string $packageCode): void
 {
     $msisdn        = $user['msisdn'];
     $accessToken   = $user['access_token'];
     $refreshToken  = $user['refresh_token'];
     $displayMasked = substr($msisdn, 0, 4) . 'xxxx' . substr($msisdn, -2);
 
-    $maxAttempts          = 10;
-    $maxTokenRefresh      = 3;
-    $tokenRefreshCount    = 0;
-    $unauthorizedDetected = false;
+    $offerInfo  = OFFERS[$packageCode] ?? null;
+    $offerLabel = $offerInfo ? $offerInfo['name'] : $packageCode;
 
-    setPending($psid, 'تفعيل عرض 70دج 🔖');
-    sendMessage($psid, "جاري تفعيل العرض 🔖 🔄...");
+    $maxAttempts       = 10;
+    $maxTokenRefresh   = 3;
+    $tokenRefreshCount = 0;
+
+    setPending($psid, "تفعيل {$offerLabel} 🔖");
+    sendMessage($psid, "جاري تفعيل العرض {$offerLabel} 🔄...");
 
     for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
 
-        // ── Endpoint الجديد: activate-product ──────────────────────────
         $raw = activateProductCurl(
             $msisdn, $accessToken,
-            json_encode(['packageCode' => 'BTLINTSPEEDDAY2Go']),
-            'act70'
+            json_encode(['packageCode' => $packageCode]),
+            'actOffer'
         );
 
         if ($raw === null) { usleep(1000000); continue; }
@@ -549,16 +711,14 @@ function activate70DZ(string $psid, array $user): void
         $responseData = $raw['json'];
         $bodyStr      = $raw['body'];
 
-        dbg("[70] attempt={$attempt} http={$httpCode} body=" . substr($bodyStr, 0, 300));
+        dbg("[OFFER:{$packageCode}] attempt={$attempt} http={$httpCode} body=" . substr($bodyStr, 0, 300));
 
         if (!is_array($responseData)) {
             if ($httpCode === 429) { usleep(2000000); continue; }
-            if ($httpCode === 500) { usleep(1000000); continue; }
-            usleep(1000000);
-            continue;
+            usleep(1000000); continue;
         }
 
-        // ── TOKEN_EXPIRED (Invalid Credentials 900901) ──────────────────
+        // TOKEN_EXPIRED
         $fault = $responseData['fault'] ?? null;
         if ($fault !== null) {
             $faultCode = (int)($fault['code'] ?? 0);
@@ -577,53 +737,46 @@ function activate70DZ(string $psid, array $user): void
                 $attempt--;
                 continue;
             }
-            // أي خطأ آخر في fault → أعد المحاولة
-            usleep(1000000);
-            continue;
+            usleep(1000000); continue;
         }
 
         $innerStatus = (int)($responseData['status'] ?? 0);
         $innerMsg    = $responseData['message'] ?? '';
 
-        // ── رصيد غير كافٍ: status=402 ──────────────────────────────────
-        // {"status":402,"message":{...},"data":{"due":0,"mainBalance":10.11}}
+        // رصيد غير كافٍ
         if ($httpCode === 402 || $innerStatus === 402) {
             clearPending($psid);
-            $balance = null;
-            $dataField = $responseData['data'] ?? null;
-            if (is_array($dataField) && isset($dataField['mainBalance'])) {
-                $balance = $dataField['mainBalance'];
-            }
-            $balanceMsg = ($balance !== null)
-                ? "رصيدك الحالي: {$balance} دج 💳"
-                : "";
+            $balance   = $responseData['data']['mainBalance'] ?? null;
+            $balanceMsg = ($balance !== null) ? "رصيدك الحالي: {$balance} دج 💳\n" : "";
             sendMessage($psid,
                 "حدث خطأ ⚠️ رصيدك غير كافي 💰 لتفعيل هذا العرض 🔖 😔\n" .
-                ($balanceMsg ? "{$balanceMsg}\n" : "") .
+                $balanceMsg .
                 "\n⚡ قناة التلقرام : https://t.me/tasjilbott"
             );
             clearSession($psid); sendMessage($psid, "📱 أرسل رقم هاتفك للبدء من جديد."); return;
         }
 
-        // ── غير مسموح (403): لم تكمل أسبوع ────────────────────────────
-        // {"status":403,"message":{"ar":"...","fr":"...","en":"..."}}
+        // 403
         if ($httpCode === 403 || $innerStatus === 403) {
             clearPending($psid);
-            sendMessage($psid, "عذرا 😬 لم تكمل اسبوع ⚠️ اكمل اسبوع و اعد المحاولة مجددا 📆\n\n⚡ قناة التلقرام : https://t.me/tasjilbott");
+            sendMessage($psid,
+                "عذرا ⚠️ عليك الاشتراك في عرض ابتداءا من 100دج (عشر آلاف) ثم اعد المحاولة 💰\n\n" .
+                "⚡ قناة التلقرام : https://t.me/tasjilbott"
+            );
             clearSession($psid); sendMessage($psid, "📱 أرسل رقم هاتفك للبدء من جديد."); return;
         }
 
-        // ── نجاح: HTTP 201 أو status=200 ────────────────────────────────
-        // {"message":"Product successfully activated","status":200,"data":[]}
+        // نجاح
         if ($httpCode === 201 || $httpCode === 200 || $innerStatus === 200) {
             $msgStr = is_array($innerMsg) ? ($innerMsg['en'] ?? '') : (string)$innerMsg;
             if (stripos($msgStr, 'successfully') !== false || $httpCode === 201 || $innerStatus === 200) {
                 clearPending($psid);
+                $detailMsg = "";
+                if ($offerInfo) $detailMsg = "\n✅ تفاصيل العرض: " . $offerInfo['display'];
                 sendMessage($psid,
                     "⭐ تم تفعيل العرض بنجاح 🎁 للرقم {$displayMasked}\n" .
-                    "✅ اسم العرض: IMTIYAZ 70 🏷️\n" .
-                    "✅ حجم الانترنت: 4Go انترنت 🌐\n" .
-                    "✅ المدة: 24h ساعة ⏳\n\n" .
+                    "✅ اسم العرض: {$offerLabel}" .
+                    $detailMsg . "\n\n" .
                     "✅ لا تنسى متابعة حساب المطور </>\nhttps://www.facebook.com/Bendjara.Yacin\n\n" .
                     "⚡ قناة التلقرام : https://t.me/tasjilbott"
                 );
@@ -636,21 +789,14 @@ function activate70DZ(string $psid, array $user): void
                 );
                 clearSession($psid); sendMessage($psid, "📱 أرسل رقم هاتفك للبدء من جديد."); return;
             }
-            // 200 بدون تأكيد → أعد المحاولة
-            usleep(1000000);
-            continue;
+            usleep(1000000); continue;
         }
 
-        // ── HTTP 429 ─────────────────────────────────────────────────────
         if ($httpCode === 429) { usleep(2000000); continue; }
-
-        // ── HTTP 500 ─────────────────────────────────────────────────────
         if ($httpCode === 500) { usleep(1000000); continue; }
-
         usleep(1000000);
     }
 
-    // ALL_ATTEMPTS_FAILED
     clearPending($psid);
     sendMessage($psid, "عذرا يبدو ان شريحتك لا تدعم هذا العرض \n\n⚡ قناة التلقرام : https://t.me/tasjilbott");
     clearSession($psid);
@@ -658,8 +804,7 @@ function activate70DZ(string $psid, array $user): void
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// Subscription cURL — يُعيد ['http_code'=>int, 'json'=>array|null, 'body'=>string]
-// أو null عند فشل الاتصال الكامل
+// Subscription cURL
 // ════════════════════════════════════════════════════════════════════════════
 
 function subscriptionCurl(string $msisdn, string $accessToken, string $jsonPayload, string $logTag): ?array
@@ -724,26 +869,21 @@ function doSubscriptionCurl(string $url, string $payload, string $token, string 
 
     $bodyStr = (string)$body;
 
-    // مثل Python: إذا Content-Type هو JSON → parse، وإلا raw
     if (str_contains($ctType, 'application/json')) {
         $json = @json_decode($bodyStr, true);
         if (is_array($json)) return ['http_code' => $httpCode, 'json' => $json, 'body' => $bodyStr];
     }
 
-    // محاولة parse على أي حال
     $json = @json_decode($bodyStr, true);
     if (is_array($json)) return ['http_code' => $httpCode, 'json' => $json, 'body' => $bodyStr];
 
-    // HTML أو استجابة غير متوقعة → null حتى يُعيد المُستدعي المحاولة
     if (stripos($bodyStr, '<!DOCTYPE') !== false || stripos($bodyStr, '<html') !== false) return null;
 
-    // raw response (مثل Python: {"raw": body, "status_code": code})
     return ['http_code' => $httpCode, 'json' => ['raw' => $bodyStr, 'status_code' => $httpCode], 'body' => $bodyStr];
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// activateProductCurl — Endpoint الجديد: /api/v1/subscribers/activate-product
-// يُعيد ['http_code'=>int, 'json'=>array|null, 'body'=>string] أو null
+// activateProductCurl
 // ════════════════════════════════════════════════════════════════════════════
 
 function activateProductCurl(string $msisdn, string $accessToken, string $jsonPayload, string $logTag): ?array
@@ -766,8 +906,7 @@ function activateProductCurl(string $msisdn, string $accessToken, string $jsonPa
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// activateWalkRewardCurl — Endpoint: /api/v1/services/walk/activate-reward/{msisdn}
-// يُعيد ['http_code'=>int, 'json'=>array|null, 'body'=>string] أو null
+// activateWalkRewardCurl
 // ════════════════════════════════════════════════════════════════════════════
 
 function activateWalkRewardCurl(string $msisdn, string $accessToken, string $jsonPayload, string $logTag): ?array
@@ -874,16 +1013,13 @@ function doActivateProductCurl(string $url, string $payload, string $token, stri
 
     $bodyStr = (string)$body;
 
-    // HTML → null حتى يُعيد المُستدعي المحاولة مع proxy آخر
     if (stripos($bodyStr, '<!DOCTYPE') !== false || stripos($bodyStr, '<html') !== false) return null;
 
-    $json    = @json_decode($bodyStr, true);
+    $json = @json_decode($bodyStr, true);
     if (is_array($json)) return ['http_code' => $httpCode, 'json' => $json, 'body' => $bodyStr];
 
     return ['http_code' => $httpCode, 'json' => ['raw' => $bodyStr], 'body' => $bodyStr];
 }
-
-
 
 function refreshAccessToken(string $refreshToken, string $msisdn, string $psid): mixed
 {
@@ -935,7 +1071,25 @@ function getPhoneOwner(string $m): ?string { if(!file_exists(PHONE_MAP_FILE)) re
 // Messenger
 // ════════════════════════════════════════════════════════════════════════════
 
-function sendWelcome(string $psid): void { sendMessage($psid, "👋 مرحباً بك في  Tasjil BOT!\n\nأهلاً وسهلاً 😊\nالرجاء إدخال رقم هاتفك للمتابعة 📱 .\n"); }
+function sendWelcomeNew(string $psid): void
+{
+    sendMessage($psid,
+        "👋 أهلاً وسهلاً بك في Tasjil BOT! 🎉\n\n" .
+        "🌟 نرحب بك كمستخدم جديد!\n\n" .
+        "📱 للبدء، أرسل رقم هاتفك (جيزي) بصيغة:\n" .
+        "مثال: 0770000000\n\n" .
+        "⚡ قناة التلقرام : https://t.me/tasjilbott"
+    );
+}
+
+function sendWelcome(string $psid): void
+{
+    sendMessage($psid,
+        "👋 مرحباً بك في Tasjil BOT!\n\n" .
+        "أهلاً وسهلاً 😊\n" .
+        "الرجاء إدخال رقم هاتفك للمتابعة 📱\n"
+    );
+}
 
 function sendMenu(string $psid): void
 {
@@ -944,11 +1098,66 @@ function sendMenu(string $psid): void
         'recipient'      => ['id' => $psid],
         'messaging_type' => 'RESPONSE',
         'message'        => [
-            'text'          => "اختر العرض المناسب 📱 \n اذا لم تظهر لك الازرار ارسل 👇\n\n✅ لتفعيل 2G الاسبوعية ارسل الرقم | 1\n✅ لتفعيل عرض 70دج_4جيقا 🏷️ ارسل الرقم | 2 \n ✅ لإرسال دعوة ارسل الرقم | 3\n\n\n",
+            'text'          => "اختر العرض المناسب 📱\nاذا لم تظهر لك الازرار ارسل 👇\n\n✅ لتفعيل 2G الاسبوعية ارسل الرقم | 1\n✅ لتفعيل عرض 70دج_4جيقا 🏷️ ارسل الرقم | 2\n✅ لإرسال دعوة ارسل الرقم | 3\n✅ للمزيد من العروض ارسل الرقم | 4\n\n",
             'quick_replies' => [
-                ['content_type'=>'text','title'=>'📶 تفعيل 2G',        'payload'=>'MENU_2G'],
-                ['content_type'=>'text','title'=>'💰 عرض 70دج - 4جيقا','payload'=>'MENU_70DZ'],
-                ['content_type'=>'text','title'=>'📨 إرسال دعوة',       'payload'=>'MENU_INVITE'],
+                ['content_type'=>'text','title'=>'📶 تفعيل 2G',           'payload'=>'MENU_2G'],
+                ['content_type'=>'text','title'=>'💰 عرض 70دج - 4جيقا',   'payload'=>'MENU_70DZ'],
+                ['content_type'=>'text','title'=>'📨 إرسال دعوة',          'payload'=>'MENU_INVITE'],
+                ['content_type'=>'text','title'=>'📦 المزيد من العروض',    'payload'=>'MENU_MORE_OFFERS'],
+            ],
+        ],
+    ], JSON_UNESCAPED_UNICODE));
+}
+
+function sendMoreOffers(string $psid): void
+{
+    setSession($psid, array_merge(getSession($psid), ['state' => 'offers']));
+
+    $text  = "================== 📦 العروض اليومية ==================\n";
+    $text .= "5️⃣  300Mo | 30دج | 24h\n";
+    $text .= "6️⃣  600Mo | 50دج | 24h\n";
+    $text .= "7️⃣  2Go   | 100دج | 24h\n";
+    $text .= "8️⃣  1Go   | 50دج | 24h\n";
+    $text .= "9️⃣  4GB   | 70دج | 24h 🏷️\n";
+    $text .= "🔟  3GB   | 90دج | 24h\n";
+    $text .= "1️⃣1️⃣ 5GB   | 190دج | 24h\n";
+    $text .= "1️⃣2️⃣ 4GB   | 140دج | 24h\n";
+    $text .= "\n================== 📦 العروض الأسبوعية ==================\n";
+    $text .= "1️⃣3️⃣ 4Go  | 150دج | 7 أيام\n";
+    $text .= "1️⃣4️⃣ 10Go | 300دج | 7 أيام\n";
+    $text .= "1️⃣5️⃣ 4GB  | 400دج | 15 يوم\n";
+    $text .= "1️⃣6️⃣ 1GB(FB) | 70دج | 3 أيام\n";
+    $text .= "\n================== 📦 العروض الشهرية ==================\n";
+    $text .= "1️⃣7️⃣ 12Go | 500دج  | 30 يوم\n";
+    $text .= "1️⃣8️⃣ 30Go | 1000دج | 30 يوم\n";
+    $text .= "1️⃣9️⃣ 60Go | 1500دج | 30 يوم\n";
+    $text .= "2️⃣0️⃣ 3GB  | 250دج  | 30 يوم\n";
+    $text .= "\n================== 📦 العروض الخاصة ==================\n";
+    $text .= "2️⃣1️⃣ 1GB  | 40دج | 1 ساعة ⚡\n";
+    $text .= "2️⃣2️⃣ FB غير محدود | 50دج | 4 ساعات 📘\n";
+    $text .= "========================================================\n\n";
+    $text .= "أرسل الرقم المقابل للعرض الذي تريده 👆";
+
+    // إرسال النص مع أزرار سريعة (Quick Replies - محدودة بـ 13 زر)
+    fbApiCall(json_encode([
+        'recipient'      => ['id' => $psid],
+        'messaging_type' => 'RESPONSE',
+        'message'        => [
+            'text'          => $text,
+            'quick_replies' => [
+                ['content_type'=>'text','title'=>'5 - 300Mo 30دج',    'payload'=>'ACTIVATE_OFFER_DOVINTSPEEDDAY100MoPRE'],
+                ['content_type'=>'text','title'=>'6 - 600Mo 50دج',    'payload'=>'ACTIVATE_OFFER_DOVINTSPEEDDAY250MoPRE'],
+                ['content_type'=>'text','title'=>'7 - 2Go 100دج',     'payload'=>'ACTIVATE_OFFER_DOVINTSPEEDDAY1GoPRE'],
+                ['content_type'=>'text','title'=>'8 - 1Go 50دج',      'payload'=>'ACTIVATE_OFFER_OFFREJEUNE50'],
+                ['content_type'=>'text','title'=>'9 - 4GB 70دج',      'payload'=>'ACTIVATE_OFFER_BTLINTSPEEDDAY2Go'],
+                ['content_type'=>'text','title'=>'10 - 3GB 90دج',     'payload'=>'ACTIVATE_OFFER_BTL500MBDAY'],
+                ['content_type'=>'text','title'=>'11 - 5GB 190دج',    'payload'=>'ACTIVATE_OFFER_BTL4GBDAY'],
+                ['content_type'=>'text','title'=>'13 - 4Go 150دج',    'payload'=>'ACTIVATE_OFFER_DOVINTSPEEDWEEK2GoPRE'],
+                ['content_type'=>'text','title'=>'14 - 10Go 300دج',   'payload'=>'ACTIVATE_OFFER_DOVINTSPEEDWEEK3GoPRE'],
+                ['content_type'=>'text','title'=>'17 - 12Go 500دج',   'payload'=>'ACTIVATE_OFFER_DOVINTSPEEDMONTH6GoPRE'],
+                ['content_type'=>'text','title'=>'18 - 30Go 1000دج',  'payload'=>'ACTIVATE_OFFER_DOVINTSPEEDMONTH15GoPRE'],
+                ['content_type'=>'text','title'=>'21 - 1GB 40دج⚡',   'payload'=>'ACTIVATE_OFFER_BTL500MBHOUR'],
+                ['content_type'=>'text','title'=>'🔙 رجوع للقائمة',   'payload'=>'BACK_MENU'],
             ],
         ],
     ], JSON_UNESCAPED_UNICODE));
