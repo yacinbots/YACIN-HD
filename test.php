@@ -1176,7 +1176,7 @@ function activate2G(string $psid, array $user): void
                     "⚡ قناة التلقرام : https://t.me/tasjilbott"
                 );
                 clearSession($psid);
-                sendMessage($psid, "لاتنسى متابعة حساب المطور </> : https://www.facebook.com/Bendjara.Yacin");
+                sendMessage($psid, "");
                 return;
             }
         }
