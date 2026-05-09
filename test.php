@@ -130,7 +130,7 @@ function dbg(string $m): void
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// New Users Tracking — تتبع المستخدمين الجدد
+// New Users Tracking
 // ════════════════════════════════════════════════════════════════════════════
 
 function isNewUser(string $psid): bool
@@ -255,7 +255,6 @@ function buildEventId(string $psid, array $event): string
 
 function processEvent(string $psid, array $event): void
 {
-    // تسجيل المستخدم إن كان جديداً
     $isNew = isNewUser($psid);
     markUserAsSeen($psid);
 
@@ -269,7 +268,7 @@ function processEvent(string $psid, array $event): void
 
     $text   = trim($msg['text'] ?? '');
     $digits = preg_replace('/\D/', '', $text);
-    if ($text === '') { 
+    if ($text === '') {
         if ($isNew) sendWelcomeNew($psid);
         else sendWelcome($psid);
         return;
@@ -278,6 +277,24 @@ function processEvent(string $psid, array $event): void
     // ════ فحص رسائل الإعلانات @# ... @# ════
     if (preg_match('/@#(.+?)@#/su', $text, $adMatch)) {
         handleAdminBroadcast($psid, trim($adMatch[1]));
+        return;
+    }
+
+    // ════ فحص حالة انتظار OTP المدعو ════
+    $session = getSession($psid);
+    $state   = $session['state'] ?? 'idle';
+
+    if ($state === 'awaiting_otp') { handleAwaitingOtp($psid, $text, $session); return; }
+
+    // ════ فحص حالة انتظار رقم المدعو (MGM) ════
+    if ($state === 'awaiting_invite_phone') {
+        handleInvitePhoneInput($psid, $text, $session);
+        return;
+    }
+
+    // ════ فحص حالة انتظار OTP المدعو لتفعيل مكافأة MGM ════
+    if ($state === 'awaiting_invitee_otp') {
+        handleInviteeOtp($psid, $text, $session);
         return;
     }
 
@@ -291,11 +308,6 @@ function processEvent(string $psid, array $event): void
     if (preg_match('/^07\d{8}$/', $digits)) { handleNewPhone($psid, $digits); return; }
     if (preg_match('/^05\d{8}$/', $digits)) { sendMessage($psid, "⏳ سيتم إضافة Ooredoo قريباً."); return; }
     if (preg_match('/^06\d{8}$/', $digits)) { sendMessage($psid, "❌ لا يوجد تسجيل Mobilis."); return; }
-
-    $session = getSession($psid);
-    $state   = $session['state'] ?? 'idle';
-
-    if ($state === 'awaiting_otp') { handleAwaitingOtp($psid, $text, $session); return; }
 
     if ($state === 'menu' || $state === 'offers') {
         if     ($text === '1') handlePostback($psid, 'MENU_2G');
@@ -320,27 +332,24 @@ function processEvent(string $psid, array $event): void
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// Admin Broadcast — إرسال إعلان لجميع المستخدمين
+// Admin Broadcast
 // ════════════════════════════════════════════════════════════════════════════
 
 function handleAdminBroadcast(string $psid, string $adText): void
 {
-    // يمكنك تقييد الإعلانات لـ PSID محدد هنا
-    // if ($psid !== 'ADMIN_PSID') { sendMessage($psid, "❌ ليس لديك صلاحية."); return; }
-
     $users = getAllKnownUsers();
     $count = 0;
     foreach ($users as $uid) {
         sendMessage($uid, "📢 إعلان:\n\n" . $adText);
         $count++;
-        usleep(100000); // تأخير بسيط لتفادي rate limit
+        usleep(100000);
     }
     sendMessage($psid, "✅ تم إرسال الإعلان إلى {$count} مستخدم.");
     dbg("[BROADCAST] from={$psid} users={$count} msg=" . substr($adText, 0, 100));
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// OTP Handler
+// OTP Handler (للداعي - تسجيل الدخول العادي)
 // ════════════════════════════════════════════════════════════════════════════
 
 function handleAwaitingOtp(string $psid, string $text, array $session): void
@@ -439,16 +448,620 @@ function handlePostback(string $psid, string $payload): void
             activate70DZ($psid, $user);
             break;
         case 'MENU_INVITE':
-            sendMessage($psid, "قيد التطوير 🛠️"); break;
+            $sess = getSession($psid); $user = getUser($psid);
+            if (!$user || empty($user['access_token'])) { sendMessage($psid, "⚠️ يجب تسجيل الدخول أولاً، أرسل رقم هاتفك."); return; }
+            if (!empty($sess['msisdn'])) $user['msisdn'] = $sess['msisdn'];
+            handleInviteStart($psid, $user);
+            break;
         case 'MENU_MORE_OFFERS':
             sendMoreOffers($psid); break;
+        case 'BACK_MENU':
+            sendMenu($psid); break;
         default:
             sendWelcome($psid);
     }
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// fetchSubscriptionHistory — جلب تاريخ الاشتراكات
+// MGM — بداية عملية الدعوة
+// ════════════════════════════════════════════════════════════════════════════
+
+function handleInviteStart(string $psid, array $user): void
+{
+    $msisdn      = $user['msisdn'];
+    $accessToken = $user['access_token'];
+
+    sendMessage($psid, "🔍 جاري فحص المكافآت المعلقة...");
+
+    // ── الخطوة 1: محاولة سحب مكافأة معلقة أولاً ───────────────────────
+    $bonusResult = tryActivateMgmBonus($psid, $msisdn, $accessToken, $user);
+
+    if ($bonusResult === 'SUCCESS_1GO') {
+        sendMessage($psid,
+            "🎁 تم تفعيل مكافأة معلقة وحصلت على 1 جيقا 🎉\n\n" .
+            "⏳ عد بعد 24 ساعة للحصول على مكافأة جديدة 📆\n\n" .
+            "⚡ قناة التلقرام : https://t.me/tasjilbott"
+        );
+        clearSession($psid);
+        sendMessage($psid, "📱 أرسل رقم هاتفك للبدء من جديد.");
+        return;
+    }
+
+    if ($bonusResult === 'SUCCESS_500MO') {
+        sendMessage($psid,
+            "🎁 تم تفعيل مكافأة معلقة وحصلت على 500Mo 🎉\n\n" .
+            "⏳ عد بعد 24 ساعة للحصول على مكافأة جديدة 📆\n\n" .
+            "⚡ قناة التلقرام : https://t.me/tasjilbott"
+        );
+        clearSession($psid);
+        sendMessage($psid, "📱 أرسل رقم هاتفك للبدء من جديد.");
+        return;
+    }
+
+    if ($bonusResult === 'ALREADY_CLAIMED') {
+        sendMessage($psid,
+            "⚠️ لقد استفدت من الدعوة اليوم ولديك مكافأة أخرى معلقة.\n" .
+            "تأكد من مرور 24 ساعة على آخر استلام للمكافأة وأعد المحاولة 📆\n\n" .
+            "⚡ قناة التلقرام : https://t.me/tasjilbott"
+        );
+        clearSession($psid);
+        sendMessage($psid, "📱 أرسل رقم هاتفك للبدء من جديد.");
+        return;
+    }
+
+    // إذا REWARD_NOT_EXIST → نتابع لفحص الدعوات المتاحة
+    // ── الخطوة 2: فحص قائمة الدعوات ───────────────────────────────────
+    sendMessage($psid, "🔍 جاري فحص الدعوات المتاحة...");
+    $invitations = fetchMgmInvitations($msisdn, $accessToken);
+
+    if ($invitations === null) {
+        // خطأ في الاتصال أو التوكن
+        sendMessage($psid, "❌ حدث خطأ أثناء جلب بيانات الدعوات، حاول مجدداً.");
+        clearSession($psid);
+        sendMessage($psid, "📱 أرسل رقم هاتفك للبدء من جديد.");
+        return;
+    }
+
+    $maxInvitations  = $invitations['campaign']['maxInvitation'] ?? 5;
+    $invitationList  = $invitations['invitations'] ?? [];
+
+    $doneCount    = 0;
+    $pendingCount = 0;
+    $pendingIds   = [];
+
+    foreach ($invitationList as $inv) {
+        if (($inv['status'] ?? '') === 'DONE')    $doneCount++;
+        if (($inv['status'] ?? '') === 'PENDING') {
+            $pendingCount++;
+            $pendingIds[] = $inv['id'] ?? null;
+        }
+    }
+
+    $totalCount = count($invitationList);
+
+    // الحد الأقصى مكتمل بـ DONE كلها → لا مجال لدعوة جديدة
+    if ($doneCount >= $maxInvitations) {
+        sendMessage($psid,
+            "🚫 لقد وصلت للحد الأقصى لعدد الدعوات {$maxInvitations} ✅\n\n" .
+            "⚡ قناة التلقرام : https://t.me/tasjilbott"
+        );
+        clearSession($psid);
+        sendMessage($psid, "📱 أرسل رقم هاتفك للبدء من جديد.");
+        return;
+    }
+
+    // إذا وصلنا للحد الكلي لكن بعضها PENDING → نحذف المعلقة
+    if ($totalCount >= $maxInvitations && $pendingCount > 0) {
+        sendMessage($psid, "🔄 جاري حذف الدعوات المعلقة لتوفير مكان...");
+        $deleted = deletePendingInvitations($msisdn, $accessToken, $pendingIds);
+        if (!$deleted) {
+            sendMessage($psid, "❌ تعذر حذف الدعوات المعلقة، حاول لاحقاً.");
+            clearSession($psid);
+            sendMessage($psid, "📱 أرسل رقم هاتفك للبدء من جديد.");
+            return;
+        }
+        sendMessage($psid, "✅ تم حذف الدعوات المعلقة بنجاح.");
+    }
+
+    // ── الخطوة 3: طلب رقم المدعو ───────────────────────────────────────
+    setSession($psid, [
+        'state'        => 'awaiting_invite_phone',
+        'msisdn'       => $msisdn,
+        'access_token' => $accessToken,
+        'refresh_token'=> $user['refresh_token'],
+    ]);
+
+    sendMessage($psid,
+        "📲 أرسل رقم هاتف الشخص الذي تريد دعوته (جيزي فقط)\n" .
+        "مثال: 0770000000\n\n" .
+        "لإلغاء العملية أرسل الرقم: 1"
+    );
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// MGM — استقبال رقم المدعو
+// ════════════════════════════════════════════════════════════════════════════
+
+function handleInvitePhoneInput(string $psid, string $text, array $session): void
+{
+    // إلغاء العملية
+    if (trim($text) === '1') {
+        clearSession($psid);
+        sendMessage($psid, "✅ تم إلغاء عملية الدعوة.");
+        sendMenu($psid);
+        return;
+    }
+
+    $digits = preg_replace('/\D/', '', $text);
+
+    // تحقق من الصيغة: 07xxxxxxxx (10 أرقام)
+    if (!preg_match('/^07\d{8}$/', $digits)) {
+        sendMessage($psid,
+            "❌ الرقم غير صحيح، أرسل رقم جيزي بصيغة 07xxxxxxxx\n\n" .
+            "لإلغاء العملية أرسل الرقم: 1"
+        );
+        return;
+    }
+
+    $receiverMsisdn = '213' . substr($digits, 1);
+    $senderMsisdn   = $session['msisdn'];
+    $accessToken    = $session['access_token'];
+    $refreshToken   = $session['refresh_token'];
+
+    sendMessage($psid, "📤 جاري إرسال الدعوة...");
+
+    // ── إرسال الدعوة ────────────────────────────────────────────────────
+    $result = sendMgmInvitation($senderMsisdn, $receiverMsisdn, $accessToken, $refreshToken, $psid);
+
+    switch ($result['status']) {
+        case 'SUCCESS':
+            sendMessage($psid,
+                "✅ تم إرسال الدعوة بنجاح إلى الرقم 0" . substr($receiverMsisdn, 3) . " 🎉\n\n" .
+                "📲 تم إرسال رسالة نصية إلى الرقم المدعو.\n" .
+                "سيتم الآن تفعيل مكافأتك بعد تسجيل المدعو...\n\n" .
+                "🔢 الرجاء إدخال رمز التحقق الذي وصل لرقم المدعو:\n\n" .
+                "لإلغاء العملية أرسل الرقم: 1"
+            );
+            // إرسال OTP للمدعو
+            if (sendDjezzyOTP($receiverMsisdn)) {
+                setSession($psid, [
+                    'state'           => 'awaiting_invitee_otp',
+                    'msisdn'          => $senderMsisdn,
+                    'access_token'    => $result['access_token'] ?? $accessToken,
+                    'refresh_token'   => $result['refresh_token'] ?? $refreshToken,
+                    'invitee_msisdn'  => $receiverMsisdn,
+                ]);
+            } else {
+                sendMessage($psid, "⚠️ تعذر إرسال رمز التحقق للمدعو. حاول لاحقاً.");
+                clearSession($psid);
+                sendMessage($psid, "📱 أرسل رقم هاتفك للبدء من جديد.");
+            }
+            break;
+
+        case 'MAX_INVITATIONS':
+            sendMessage($psid,
+                "🚫 لقد وصلت للحد الأقصى لعدد الدعوات 5 ✅\n\n" .
+                "⚡ قناة التلقرام : https://t.me/tasjilbott"
+            );
+            clearSession($psid);
+            sendMessage($psid, "📱 أرسل رقم هاتفك للبدء من جديد.");
+            break;
+
+        case 'ALREADY_INVITED':
+            sendMessage($psid,
+                "⚠️ لقد تمت دعوة هذا الرقم من قبل، استخدم رقماً آخر.\n" .
+                "لإلغاء العملية أرسل الرقم: 1"
+            );
+            // نبقى في نفس الحالة لإتاحة إدخال رقم آخر
+            break;
+
+        case 'CUSTOMER_NOT_EXIST':
+        case 'INVALID_NUMBER':
+            sendMessage($psid,
+                "❌ الرقم المدرج غير موجود أو غير نشط، تأكد من الرقم وأعد المحاولة.\n" .
+                "لإلغاء العملية أرسل الرقم: 1"
+            );
+            break;
+
+        case 'TOKEN_EXPIRED':
+            sendMessage($psid, "🔄 انتهت صلاحية الجلسة، الرجاء إعادة إرسال رقمك للتسجيل.");
+            clearSession($psid);
+            sendMessage($psid, "📱 أرسل رقم هاتفك للبدء من جديد.");
+            break;
+
+        default:
+            sendMessage($psid, "❌ حدث خطأ غير متوقع، حاول لاحقاً.");
+            clearSession($psid);
+            sendMessage($psid, "📱 أرسل رقم هاتفك للبدء من جديد.");
+            break;
+    }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// MGM — استقبال OTP المدعو وتفعيل المكافآت
+// ════════════════════════════════════════════════════════════════════════════
+
+function handleInviteeOtp(string $psid, string $text, array $session): void
+{
+    // إلغاء العملية
+    if (trim($text) === '1') {
+        clearSession($psid);
+        sendMessage($psid, "✅ تم إلغاء عملية الدعوة.");
+        sendMenu($psid);
+        return;
+    }
+
+    if (!preg_match('/\b(\d{6})\b/', $text, $m)) {
+        sendMessage($psid,
+            "⚠️ الرجاء إدخال رمز التحقق المكوّن من 6 أرقام.\n\n" .
+            "لإلغاء العملية أرسل الرقم: 1"
+        );
+        return;
+    }
+
+    $inviteeMsisdn  = $session['invitee_msisdn'];
+    $senderMsisdn   = $session['msisdn'];
+    $senderToken    = $session['access_token'];
+    $senderRefresh  = $session['refresh_token'];
+
+    sendMessage($psid, "🔐 جاري التحقق من الرمز...");
+
+    // التحقق من OTP المدعو واستخراج توكنه
+    $inviteeResult = verifyOTP($inviteeMsisdn, $m[1]);
+
+    if ($inviteeResult === 'wrong_otp') {
+        sendMessage($psid,
+            "❌ الرمز خاطئ، أعد إرسال الرمز الصحيح.\n\n" .
+            "لإلغاء العملية أرسل الرقم: 1"
+        );
+        return;
+    }
+
+    if ($inviteeResult === false) {
+        sendMessage($psid, "❌ حدث خطأ أثناء التحقق، حاول مجدداً.");
+        clearSession($psid);
+        sendMessage($psid, "📱 أرسل رقم هاتفك للبدء من جديد.");
+        return;
+    }
+
+    $inviteeToken = $inviteeResult['access_token'];
+
+    sendMessage($psid, "🎁 تم التحقق بنجاح! جاري تفعيل المكافآت...");
+
+    // ── تفعيل مكافأة الداعي (1Go) ──────────────────────────────────────
+    $senderBonus  = activateMgmReward($senderMsisdn, $senderToken, 'MGMBONUS1Go');
+    // ── تفعيل مكافأة المدعو (500Mo) ────────────────────────────────────
+    $inviteeBonus = activateMgmReward($inviteeMsisdn, $inviteeToken, 'MGMBONUS500Mo');
+
+    // ── بناء رسالة النتيجة ──────────────────────────────────────────────
+    $senderMsg  = match($senderBonus) {
+        'SUCCESS'        => "✅ مكافأتك (1 جيقا) تم تفعيلها بنجاح 🎉",
+        'ALREADY_CLAIMED'=> "⚠️ مكافأتك محجوزة، تأكد من مرور 24 ساعة وأعد المحاولة.",
+        'REWARD_NOT_EXIST'=> "❌ لا توجد مكافأة متاحة لرقمك حالياً.",
+        default          => "⚠️ تعذر تفعيل مكافأتك مؤقتاً.",
+    };
+
+    $inviteeMsg = match($inviteeBonus) {
+        'SUCCESS'        => "✅ مكافأة المدعو (500Mo) تم تفعيلها بنجاح 🎉",
+        'ALREADY_CLAIMED'=> "⚠️ مكافأة المدعو محجوزة، يجب الانتظار 24 ساعة.",
+        'REWARD_NOT_EXIST'=> "❌ لا توجد مكافأة متاحة للمدعو حالياً.",
+        default          => "⚠️ تعذر تفعيل مكافأة المدعو مؤقتاً.",
+    };
+
+    sendMessage($psid,
+        "📊 نتيجة تفعيل المكافآت:\n\n" .
+        "👤 أنت (الداعي):\n{$senderMsg}\n\n" .
+        "👤 المدعو:\n{$inviteeMsg}\n\n" .
+        "⚡ قناة التلقرام : https://t.me/tasjilbott"
+    );
+
+    clearSession($psid);
+    sendMessage($psid, "📱 أرسل رقم هاتفك للبدء من جديد.");
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// MGM API — جلب قائمة الدعوات
+// ════════════════════════════════════════════════════════════════════════════
+
+function fetchMgmInvitations(string $msisdn, string $accessToken): ?array
+{
+    $url     = "https://apim.djezzy.dz/mobile-api/api/v1/services/mgm/invitations/{$msisdn}";
+    $proxies = array_merge(loadProxies(), refreshProxies());
+
+    foreach ($proxies as $p) {
+        $pp = parseProxy($p);
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_HTTPGET        => true,
+            CURLOPT_HTTPHEADER     => [
+                'Accept: application/json',
+                "Authorization: Bearer {$accessToken}",
+                'User-Agent: MobileApp/3.0.0',
+                'accept-language: ar',
+            ],
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_ENCODING       => 'gzip',
+            CURLOPT_TIMEOUT        => 12,
+            CURLOPT_CONNECTTIMEOUT => 5,
+            CURLOPT_SSL_VERIFYPEER => false,
+            CURLOPT_PROXY          => $pp['host'],
+            CURLOPT_PROXYUSERPWD   => $pp['userpass'],
+            CURLOPT_PROXYTYPE      => CURLPROXY_HTTP,
+            CURLOPT_FOLLOWLOCATION => true,
+        ]);
+        $body     = curl_exec($ch);
+        $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $errno    = curl_errno($ch);
+        curl_close($ch);
+
+        if ($errno || !$body) continue;
+        if (stripos($body, '<html') !== false) continue;
+
+        $json = @json_decode($body, true);
+        if (is_array($json) && ($json['status'] ?? 0) == 200) {
+            return $json['data'] ?? [];
+        }
+    }
+    return null;
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// MGM API — حذف الدعوات المعلقة
+// ════════════════════════════════════════════════════════════════════════════
+
+function deletePendingInvitations(string $msisdn, string $accessToken, array $pendingIds): bool
+{
+    $url     = "https://apim.djezzy.dz/mobile-api/api/v1/services/mgm/delete-invitation/{$msisdn}";
+    $proxies = array_merge(loadProxies(), refreshProxies());
+    $success = false;
+
+    foreach ($pendingIds as $id) {
+        if ($id === null) continue;
+        foreach ($proxies as $p) {
+            $pp = parseProxy($p);
+            $ch = curl_init($url);
+            curl_setopt_array($ch, [
+                CURLOPT_POST           => true,
+                CURLOPT_POSTFIELDS     => json_encode(['invitationId' => $id]),
+                CURLOPT_HTTPHEADER     => [
+                    'Content-Type: application/json',
+                    'Accept: application/json',
+                    'Accept-Encoding: gzip',
+                    "Authorization: Bearer {$accessToken}",
+                    'User-Agent: MobileApp/3.0.0',
+                    'accept-language: ar',
+                ],
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_ENCODING       => 'gzip',
+                CURLOPT_TIMEOUT        => 10,
+                CURLOPT_CONNECTTIMEOUT => 5,
+                CURLOPT_SSL_VERIFYPEER => false,
+                CURLOPT_PROXY          => $pp['host'],
+                CURLOPT_PROXYUSERPWD   => $pp['userpass'],
+                CURLOPT_PROXYTYPE      => CURLPROXY_HTTP,
+                CURLOPT_FOLLOWLOCATION => true,
+            ]);
+            $body     = curl_exec($ch);
+            $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $errno    = curl_errno($ch);
+            curl_close($ch);
+
+            dbg("[DELETE_PENDING] id={$id} http={$httpCode}");
+            if (!$errno && ($httpCode === 200 || $httpCode === 201)) { $success = true; break; }
+        }
+    }
+    return $success;
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// MGM API — إرسال دعوة
+// ════════════════════════════════════════════════════════════════════════════
+
+function sendMgmInvitation(string $senderMsisdn, string $receiverMsisdn, string $accessToken, string $refreshToken, string $psid): array
+{
+    $url     = "https://apim.djezzy.dz/mobile-api/api/v1/services/mgm/send-invitation/{$senderMsisdn}";
+    $payload = json_encode(['msisdnReciever' => $receiverMsisdn]);
+    $proxies = array_merge(loadProxies(), refreshProxies());
+
+    $maxTokenRefresh   = 3;
+    $tokenRefreshCount = 0;
+    $attempts          = 0;
+
+    while ($attempts < 10) {
+        $attempts++;
+        foreach ($proxies as $p) {
+            $pp = parseProxy($p);
+            $ch = curl_init($url);
+            curl_setopt_array($ch, [
+                CURLOPT_POST           => true,
+                CURLOPT_POSTFIELDS     => $payload,
+                CURLOPT_HTTPHEADER     => [
+                    'Content-Type: application/json',
+                    'Accept: application/json',
+                    'Accept-Encoding: gzip',
+                    'accept-language: ar',
+                    "Authorization: Bearer {$accessToken}",
+                    'User-Agent: MobileApp/3.0.0',
+                ],
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_ENCODING       => 'gzip',
+                CURLOPT_TIMEOUT        => 10,
+                CURLOPT_CONNECTTIMEOUT => 5,
+                CURLOPT_SSL_VERIFYPEER => false,
+                CURLOPT_PROXY          => $pp['host'],
+                CURLOPT_PROXYUSERPWD   => $pp['userpass'],
+                CURLOPT_PROXYTYPE      => CURLPROXY_HTTP,
+                CURLOPT_FOLLOWLOCATION => true,
+            ]);
+            $body     = curl_exec($ch);
+            $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $errno    = curl_errno($ch);
+            curl_close($ch);
+
+            dbg("[MGM_INVITE] http={$httpCode} body=" . substr((string)$body, 0, 300));
+
+            if ($errno || !$body) continue;
+            if (stripos($body, '<html') !== false) continue;
+
+            $json = @json_decode($body, true);
+            if (!is_array($json)) continue;
+
+            // TOKEN_EXPIRED (900901)
+            $fault = $json['fault'] ?? null;
+            if ($fault && (int)($fault['code'] ?? 0) === 900901) {
+                if ($tokenRefreshCount >= $maxTokenRefresh) {
+                    return ['status' => 'TOKEN_EXPIRED'];
+                }
+                $tokenRefreshCount++;
+                $refreshed = refreshAccessToken($refreshToken, $senderMsisdn, $psid);
+                if ($refreshed === false) return ['status' => 'TOKEN_EXPIRED'];
+                $accessToken  = $refreshed['access_token'];
+                $refreshToken = $refreshed['refresh_token'];
+                break; // أعد المحاولة مع التوكن الجديد
+            }
+
+            $msgField = $json['message'] ?? '';
+            $arMsg    = is_array($msgField) ? ($msgField['ar'] ?? '') : (string)$msgField;
+
+            // نجاح
+            if ($httpCode === 201 && str_contains($arMsg, 'تمت العملية بنجاح')) {
+                return ['status' => 'SUCCESS', 'access_token' => $accessToken, 'refresh_token' => $refreshToken];
+            }
+
+            // الحد الأقصى
+            if ($httpCode === 400 && str_contains($arMsg, 'وصلت إلى الحد الأقصى')) {
+                return ['status' => 'MAX_INVITATIONS'];
+            }
+
+            // مدعو من قبل
+            if (str_contains($arMsg, 'تمت دعوة هذا المستلم') || str_contains($arMsg, 'هذه العملية غير متوفرة')) {
+                return ['status' => 'ALREADY_INVITED'];
+            }
+
+            // عميل غير موجود
+            if (str_contains($arMsg, 'العميل غير موجود')) {
+                return ['status' => 'CUSTOMER_NOT_EXIST'];
+            }
+
+            // رقم غير نشط
+            if (str_contains($arMsg, 'غير نشط أو غير صالح')) {
+                return ['status' => 'INVALID_NUMBER'];
+            }
+
+            usleep(1000000);
+        }
+    }
+
+    return ['status' => 'ERROR'];
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// MGM API — تفعيل مكافأة MGM (للداعي أو المدعو)
+// ════════════════════════════════════════════════════════════════════════════
+
+function activateMgmReward(string $msisdn, string $accessToken, string $packageCode): string
+{
+    $url     = "https://apim.djezzy.dz/mobile-api/api/v1/services/mgm/activate-reward/{$msisdn}";
+    $payload = json_encode(['packageCode' => $packageCode]);
+    $proxies = array_merge(loadProxies(), refreshProxies());
+
+    for ($attempt = 1; $attempt <= 5; $attempt++) {
+        foreach ($proxies as $p) {
+            $pp = parseProxy($p);
+            $ch = curl_init($url);
+            curl_setopt_array($ch, [
+                CURLOPT_POST           => true,
+                CURLOPT_POSTFIELDS     => $payload,
+                CURLOPT_HTTPHEADER     => [
+                    'Content-Type: application/json',
+                    'Accept: application/json',
+                    'Accept-Encoding: gzip',
+                    'accept-language: ar',
+                    "Authorization: Bearer {$accessToken}",
+                    'User-Agent: MobileApp/3.0.0',
+                ],
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_ENCODING       => 'gzip',
+                CURLOPT_TIMEOUT        => 10,
+                CURLOPT_CONNECTTIMEOUT => 5,
+                CURLOPT_SSL_VERIFYPEER => false,
+                CURLOPT_PROXY          => $pp['host'],
+                CURLOPT_PROXYUSERPWD   => $pp['userpass'],
+                CURLOPT_PROXYTYPE      => CURLPROXY_HTTP,
+                CURLOPT_FOLLOWLOCATION => true,
+            ]);
+            $body     = curl_exec($ch);
+            $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $errno    = curl_errno($ch);
+            curl_close($ch);
+
+            dbg("[MGM_REWARD:{$packageCode}] http={$httpCode} body=" . substr((string)$body, 0, 300));
+
+            if ($errno || !$body) continue;
+            if (stripos($body, '<html') !== false) continue;
+
+            $json = @json_decode($body, true);
+            if (!is_array($json)) continue;
+
+            // نجاح (200/201 + successfully activated)
+            if (($httpCode === 200 || $httpCode === 201)) {
+                $msg = $json['message'] ?? '';
+                $msgStr = is_array($msg) ? ($msg['en'] ?? '') : (string)$msg;
+                if (stripos($msgStr, 'successfully activated') !== false || $httpCode === 201) {
+                    return 'SUCCESS';
+                }
+            }
+
+            // محجوزة (404 + Eligibility not found)
+            if ($httpCode === 404) {
+                $msg = $json['message'] ?? '';
+                if (is_string($msg) && str_contains($msg, 'Eligibility not found')) {
+                    return 'ALREADY_CLAIMED';
+                }
+                // لا وجود للمكافأة
+                if (is_array($msg) && str_contains($msg['ar'] ?? '', 'لا وجود للمكافأة')) {
+                    return 'REWARD_NOT_EXIST';
+                }
+            }
+
+            // معالجة تعذرت (400)
+            if ($httpCode === 400) {
+                $msg = $json['message'] ?? '';
+                $arMsg = is_array($msg) ? ($msg['ar'] ?? '') : '';
+                if (str_contains($arMsg, 'تعذر معالجة طلبك')) {
+                    return 'ALREADY_CLAIMED';
+                }
+            }
+
+            usleep(500000);
+        }
+    }
+    return 'ERROR';
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// MGM — محاولة سحب مكافأة معلقة (MGMBONUS1Go أولاً ثم MGMBONUS500Mo)
+// ════════════════════════════════════════════════════════════════════════════
+
+function tryActivateMgmBonus(string $psid, string $msisdn, string $accessToken, array $user): string
+{
+    // محاولة 1Go أولاً
+    $r1 = activateMgmReward($msisdn, $accessToken, 'MGMBONUS1Go');
+    if ($r1 === 'SUCCESS')         return 'SUCCESS_1GO';
+    if ($r1 === 'ALREADY_CLAIMED') return 'ALREADY_CLAIMED';
+    if ($r1 === 'REWARD_NOT_EXIST') {
+        // محاولة 500Mo
+        $r2 = activateMgmReward($msisdn, $accessToken, 'MGMBONUS500Mo');
+        if ($r2 === 'SUCCESS')         return 'SUCCESS_500MO';
+        if ($r2 === 'ALREADY_CLAIMED') return 'ALREADY_CLAIMED';
+        // REWARD_NOT_EXIST → لا توجد مكافأة معلقة → نكمل
+        return 'REWARD_NOT_EXIST';
+    }
+    return 'ERROR';
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// fetchSubscriptionHistory
 // ════════════════════════════════════════════════════════════════════════════
 
 function fetchSubscriptionHistory(string $msisdn, string $accessToken): ?array
@@ -490,10 +1103,6 @@ function fetchSubscriptionHistory(string $msisdn, string $accessToken): ?array
     return null;
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// getLastWalkWinDate — استخراج آخر تفعيل Walk&Win
-// ════════════════════════════════════════════════════════════════════════════
-
 function getLastWalkWinDate(array $history): ?int
 {
     foreach ($history as $item) {
@@ -505,10 +1114,6 @@ function getLastWalkWinDate(array $history): ?int
     }
     return null;
 }
-
-// ════════════════════════════════════════════════════════════════════════════
-// formatTimeRemaining — تنسيق الوقت المتبقي
-// ════════════════════════════════════════════════════════════════════════════
 
 function formatTimeRemaining(int $secondsLeft): string
 {
@@ -528,7 +1133,7 @@ function formatTimeRemaining(int $secondsLeft): string
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// activate2G — مع فحص تاريخ السبعة أيام أولاً
+// activate2G
 // ════════════════════════════════════════════════════════════════════════════
 
 function activate2G(string $psid, array $user): void
@@ -538,7 +1143,6 @@ function activate2G(string $psid, array $user): void
     $refreshToken  = $user['refresh_token'];
     $displayMasked = substr($msisdn, 0, 4) . 'xxxx' . substr($msisdn, -2);
 
-    // ── فحص تاريخ آخر تفعيل ────────────────────────────────────────────
     sendMessage($psid, "🔍 جاري فحص تاريخ آخر تفعيل...");
     $history = fetchSubscriptionHistory($msisdn, $accessToken);
 
@@ -561,7 +1165,6 @@ function activate2G(string $psid, array $user): void
             }
         }
     }
-    // إذا لم يكن هناك تاريخ أو مرت 7 أيام → أكمل التفعيل
 
     $maxAttempts       = 30;
     $maxTokenRefresh   = 3;
@@ -591,7 +1194,6 @@ function activate2G(string $psid, array $user): void
             continue;
         }
 
-        // TOKEN_EXPIRED
         $fault = $responseData['fault'] ?? null;
         if ($fault !== null && (int)($fault['code'] ?? 0) === 900901) {
             if ($tokenRefreshCount >= $maxTokenRefresh) {
@@ -611,7 +1213,6 @@ function activate2G(string $psid, array $user): void
 
         $innerStatus = (int)($responseData['status'] ?? 0);
 
-        // HTTP 402 = رصيد غير كافٍ
         if ($httpCode === 402 || $innerStatus === 402) {
             clearPending($psid);
             sendMessage($psid,
@@ -623,10 +1224,8 @@ function activate2G(string $psid, array $user): void
             clearSession($psid); sendMessage($psid, "📱 أرسل رقم هاتفك للبدء من جديد."); return;
         }
 
-        // HTTP 403
         if ($httpCode === 403 || $innerStatus === 403) {
             clearPending($psid);
-            // 403 من Walk&Win = غير مشترك في عرض كافٍ
             sendMessage($psid,
                 "عذرا ⚠️ عليك الاشتراك في عرض ابتداءا من 100دج (عشر آلاف) ثم اعد المحاولة 💰\n\n" .
                 "⚡ قناة التلقرام : https://t.me/tasjilbott"
@@ -634,7 +1233,6 @@ function activate2G(string $psid, array $user): void
             clearSession($psid); sendMessage($psid, "📱 أرسل رقم هاتفك للبدء من جديد."); return;
         }
 
-        // نجاح
         if ($httpCode === 201 || $httpCode === 200 || $innerStatus === 200) {
             $msgStr = $responseData['message'] ?? '';
             if (is_array($msgStr)) $msgStr = $msgStr['en'] ?? '';
@@ -677,7 +1275,7 @@ function activate70DZ(string $psid, array $user): void
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// activateOffer — تفعيل عرض بـ packageCode محدد (activate-product)
+// activateOffer
 // ════════════════════════════════════════════════════════════════════════════
 
 function activateOffer(string $psid, array $user, string $packageCode): void
@@ -718,7 +1316,6 @@ function activateOffer(string $psid, array $user, string $packageCode): void
             usleep(1000000); continue;
         }
 
-        // TOKEN_EXPIRED
         $fault = $responseData['fault'] ?? null;
         if ($fault !== null) {
             $faultCode = (int)($fault['code'] ?? 0);
@@ -743,7 +1340,6 @@ function activateOffer(string $psid, array $user, string $packageCode): void
         $innerStatus = (int)($responseData['status'] ?? 0);
         $innerMsg    = $responseData['message'] ?? '';
 
-        // رصيد غير كافٍ
         if ($httpCode === 402 || $innerStatus === 402) {
             clearPending($psid);
             $balance   = $responseData['data']['mainBalance'] ?? null;
@@ -756,7 +1352,6 @@ function activateOffer(string $psid, array $user, string $packageCode): void
             clearSession($psid); sendMessage($psid, "📱 أرسل رقم هاتفك للبدء من جديد."); return;
         }
 
-        // 403
         if ($httpCode === 403 || $innerStatus === 403) {
             clearPending($psid);
             sendMessage($psid,
@@ -766,7 +1361,6 @@ function activateOffer(string $psid, array $user, string $packageCode): void
             clearSession($psid); sendMessage($psid, "📱 أرسل رقم هاتفك للبدء من جديد."); return;
         }
 
-        // نجاح
         if ($httpCode === 201 || $httpCode === 200 || $innerStatus === 200) {
             $msgStr = is_array($innerMsg) ? ($innerMsg['en'] ?? '') : (string)$innerMsg;
             if (stripos($msgStr, 'successfully') !== false || $httpCode === 201 || $innerStatus === 200) {
@@ -804,86 +1398,7 @@ function activateOffer(string $psid, array $user, string $packageCode): void
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// Subscription cURL
-// ════════════════════════════════════════════════════════════════════════════
-
-function subscriptionCurl(string $msisdn, string $accessToken, string $jsonPayload, string $logTag): ?array
-{
-    $url     = "https://apim.djezzy.dz/djezzy-api/api/v1/subscribers/{$msisdn}/subscription-product?include=";
-    $proxies = loadProxies();
-    $result  = null;
-
-    foreach ($proxies as $p) {
-        $pp = parseProxy($p);
-        $result = doSubscriptionCurl($url, $jsonPayload, $accessToken, $pp['host'], $pp['userpass'], $logTag);
-        if ($result !== null) return $result;
-    }
-    foreach (refreshProxies() as $p) {
-        $pp = parseProxy($p);
-        $result = doSubscriptionCurl($url, $jsonPayload, $accessToken, $pp['host'], $pp['userpass'], $logTag);
-        if ($result !== null) return $result;
-    }
-    return null;
-}
-
-function doSubscriptionCurl(string $url, string $payload, string $token, string $proxyHost, string $proxyAuth, string $tag): ?array
-{
-    $ch = curl_init($url);
-    curl_setopt_array($ch, [
-        CURLOPT_POST           => true,
-        CURLOPT_POSTFIELDS     => $payload,
-        CURLOPT_HTTPHEADER     => [
-            'Content-Type: application/json',
-            "Authorization: Bearer {$token}",
-            'x-csrf-token: YACIN_DZ',
-            'User-Agent: Djezzy/2.7.0',
-            'Host: apim.djezzy.dz',
-            'Connection: Keep-Alive',
-            'Accept: application/json',
-            'Accept-Charset: UTF-8',
-            'Accept-Encoding: gzip',
-        ],
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_ENCODING       => 'gzip',
-        CURLOPT_TIMEOUT        => 10,
-        CURLOPT_CONNECTTIMEOUT => 5,
-        CURLOPT_SSL_VERIFYPEER => false,
-        CURLOPT_PROXY          => $proxyHost,
-        CURLOPT_PROXYUSERPWD   => $proxyAuth,
-        CURLOPT_PROXYTYPE      => CURLPROXY_HTTP,
-        CURLOPT_FOLLOWLOCATION => true,
-    ]);
-
-    $body     = curl_exec($ch);
-    $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    $ctType   = curl_getinfo($ch, CURLINFO_CONTENT_TYPE) ?: '';
-    $errno    = curl_errno($ch);
-    $error    = curl_error($ch);
-    curl_close($ch);
-
-    file_put_contents('/tmp/activate.log',
-        date('Y-m-d H:i:s') . " [{$tag}] http={$httpCode} err={$error} body=" . substr((string)$body, 0, 600) . "\n",
-        FILE_APPEND);
-
-    if ($errno || $body === false || $httpCode === 0) return null;
-
-    $bodyStr = (string)$body;
-
-    if (str_contains($ctType, 'application/json')) {
-        $json = @json_decode($bodyStr, true);
-        if (is_array($json)) return ['http_code' => $httpCode, 'json' => $json, 'body' => $bodyStr];
-    }
-
-    $json = @json_decode($bodyStr, true);
-    if (is_array($json)) return ['http_code' => $httpCode, 'json' => $json, 'body' => $bodyStr];
-
-    if (stripos($bodyStr, '<!DOCTYPE') !== false || stripos($bodyStr, '<html') !== false) return null;
-
-    return ['http_code' => $httpCode, 'json' => ['raw' => $bodyStr, 'status_code' => $httpCode], 'body' => $bodyStr];
-}
-
-// ════════════════════════════════════════════════════════════════════════════
-// activateProductCurl
+// cURL Helpers
 // ════════════════════════════════════════════════════════════════════════════
 
 function activateProductCurl(string $msisdn, string $accessToken, string $jsonPayload, string $logTag): ?array
@@ -904,10 +1419,6 @@ function activateProductCurl(string $msisdn, string $accessToken, string $jsonPa
     }
     return null;
 }
-
-// ════════════════════════════════════════════════════════════════════════════
-// activateWalkRewardCurl
-// ════════════════════════════════════════════════════════════════════════════
 
 function activateWalkRewardCurl(string $msisdn, string $accessToken, string $jsonPayload, string $logTag): ?array
 {
@@ -963,14 +1474,10 @@ function doActivateWalkRewardCurl(string $url, string $payload, string $token, s
         FILE_APPEND);
 
     if ($errno || $body === false || $httpCode === 0) return null;
-
     $bodyStr = (string)$body;
-
     if (stripos($bodyStr, '<!DOCTYPE') !== false || stripos($bodyStr, '<html') !== false) return null;
-
     $json = @json_decode($bodyStr, true);
     if (is_array($json)) return ['http_code' => $httpCode, 'json' => $json, 'body' => $bodyStr];
-
     return ['http_code' => $httpCode, 'json' => ['raw' => $bodyStr], 'body' => $bodyStr];
 }
 
@@ -1010,14 +1517,10 @@ function doActivateProductCurl(string $url, string $payload, string $token, stri
         FILE_APPEND);
 
     if ($errno || $body === false || $httpCode === 0) return null;
-
     $bodyStr = (string)$body;
-
     if (stripos($bodyStr, '<!DOCTYPE') !== false || stripos($bodyStr, '<html') !== false) return null;
-
     $json = @json_decode($bodyStr, true);
     if (is_array($json)) return ['http_code' => $httpCode, 'json' => $json, 'body' => $bodyStr];
-
     return ['http_code' => $httpCode, 'json' => ['raw' => $bodyStr], 'body' => $bodyStr];
 }
 
@@ -1068,7 +1571,7 @@ function savePhoneOwner(string $m, string $p): void { $map = file_exists(PHONE_M
 function getPhoneOwner(string $m): ?string { if(!file_exists(PHONE_MAP_FILE)) return null; return (json_decode(file_get_contents(PHONE_MAP_FILE),true)??[])[$m]??null; }
 
 // ════════════════════════════════════════════════════════════════════════════
-// Messenger
+// Messenger UI
 // ════════════════════════════════════════════════════════════════════════════
 
 function sendWelcomeNew(string $psid): void
@@ -1138,7 +1641,6 @@ function sendMoreOffers(string $psid): void
     $text .= "========================================================\n\n";
     $text .= "أرسل الرقم المقابل للعرض الذي تريده 👆";
 
-    // إرسال النص مع أزرار سريعة (Quick Replies - محدودة بـ 13 زر)
     fbApiCall(json_encode([
         'recipient'      => ['id' => $psid],
         'messaging_type' => 'RESPONSE',
