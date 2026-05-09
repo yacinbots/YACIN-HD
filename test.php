@@ -1785,31 +1785,24 @@ function sendMoreOffers(string $psid): void
     $text .= "📨 أرسل رقم العرض فقط لتفعيله مباشرة";
 
     fbApiCall(json_encode([
-        'recipient' => [
-            'id' => $psid
-        ],
-        'messaging_type' => 'RESPONSE',
-        'message' => [
-            'text' => $text,
-            'quick_replies' => [
-
-                ['content_type'=>'text','title'=>'5 | 300Mo | 30دج | 24h','payload'=>'30_300Mo_24h__5'],
-                ['content_type'=>'text','title'=>'6 | 600Mo | 50دج | 24h','payload'=>'50_600Mo_24h__6'],
-                ['content_type'=>'text','title'=>'7 | 2Go | 100دج | 24h','payload'=>'100_2Go_24h__7'],
-                ['content_type'=>'text','title'=>'8 | 1Go | 50دج | 24h','payload'=>'50_1Go_24h__8'],
-                ['content_type'=>'text','title'=>'9 | 4GB | 70دج | 24h','payload'=>'70_4GB_24h__9'],
-                ['content_type'=>'text','title'=>'10 | 3GB | 90دج | 24h','payload'=>'90_3GB_24h__10'],
-                ['content_type'=>'text','title'=>'11 | 5GB | 190دج | 24h','payload'=>'190_5GB_24h__11'],
-
-                ['content_type'=>'text','title'=>'13 | 4GB | 150دج | 7d','payload'=>'150_4GB_7d__13'],
-                ['content_type'=>'text','title'=>'14 | 10GB | 300دج | 7d','payload'=>'300_10GB_7d__14'],
-
-                ['content_type'=>'text','title'=>'17 | 12GB | 500دج | 30d','payload'=>'500_12GB_30d__17'],
-                ['content_type'=>'text','title'=>'18 | 30GB | 1000دج | 30d','payload'=>'1000_30GB_30d__18'],
-
-                ['content_type'=>'text','title'=>'21 | 1GB | 40دج | 1h','payload'=>'40_1GB_1h__21'],
-
-                ['content_type'=>'text','title'=>'🔙 رجوع للقائمة','payload'=>'BACK_MENU']
+'recipient'      => ['id' => $psid],
+'messaging_type' => 'RESPONSE',
+'message'        => [
+'text'          => $text,
+'quick_replies' => [
+['content_type'=>'text','title'=>'5 - 300Mo 30دج',    'payload'=>'ACTIVATE_OFFER_DOVINTSPEEDDAY100MoPRE'],
+['content_type'=>'text','title'=>'6 - 600Mo 50دج',    'payload'=>'ACTIVATE_OFFER_DOVINTSPEEDDAY250MoPRE'],
+['content_type'=>'text','title'=>'7 - 2Go 100دج',     'payload'=>'ACTIVATE_OFFER_DOVINTSPEEDDAY1GoPRE'],
+['content_type'=>'text','title'=>'8 - 1Go 50دج',      'payload'=>'ACTIVATE_OFFER_OFFREJEUNE50'],
+['content_type'=>'text','title'=>'9 - 4GB 70دج',      'payload'=>'ACTIVATE_OFFER_BTLINTSPEEDDAY2Go'],
+['content_type'=>'text','title'=>'10 - 3GB 90دج',     'payload'=>'ACTIVATE_OFFER_BTL500MBDAY'],
+['content_type'=>'text','title'=>'11 - 5GB 190دج',    'payload'=>'ACTIVATE_OFFER_BTL4GBDAY'],
+['content_type'=>'text','title'=>'13 - 4Go 150دج',    'payload'=>'ACTIVATE_OFFER_DOVINTSPEEDWEEK2GoPRE'],
+['content_type'=>'text','title'=>'14 - 10Go 300دج',   'payload'=>'ACTIVATE_OFFER_DOVINTSPEEDWEEK3GoPRE'],
+['content_type'=>'text','title'=>'17 - 12Go 500دج',   'payload'=>'ACTIVATE_OFFER_DOVINTSPEEDMONTH6GoPRE'],
+['content_type'=>'text','title'=>'18 - 30Go 1000دج',  'payload'=>'ACTIVATE_OFFER_DOVINTSPEEDMONTH15GoPRE'],
+['content_type'=>'text','title'=>'21 - 1GB 40دج⚡',   'payload'=>'ACTIVATE_OFFER_BTL500MBHOUR'],
+['content_type'=>'text','title'=>'🔙 رجوع للقائمة',   'payload'=>'BACK_MENU']
 
             ]
         ]
