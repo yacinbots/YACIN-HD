@@ -263,7 +263,7 @@ function processEvent(string $psid, array $event): void
 
     $msg = $event['message'];
     if (isset($msg['sticker_id']) && $msg['sticker_id'] == 369239263222822) { sendMessage($psid, '👍'); return; }
-    if (isset($msg['attachments']) && empty($msg['text'])) { sendMessage($psid, "✅"); return; }
+    if (isset($msg['attachments']) && empty($msg['text'])) { sendMessage($psid, "🙂"); return; }
     if (isset($msg['quick_reply']['payload'])) { handlePostback($psid, $msg['quick_reply']['payload']); return; }
 
     $text   = trim($msg['text'] ?? '');
@@ -318,11 +318,27 @@ function processEvent(string $psid, array $event): void
             handlePostback($psid, 'ACTIVATE_OFFER_' . OFFER_SHORTCUTS[$text]);
         } else {
             sendMessage($psid,
-                "اختيار خاطئ ❌ قم باستخدام الازرار\nاذا لم تظهر لك الازرار ارسل 👇\n\n" .
-                "✅ لتفعيل 2G الاسبوعية ارسل الرقم | 1\n" .
-                "✅ لتفعيل عرض 70دج_4جيقا 🏷️ ارسل الرقم | 2\n" .
-                "✅ لإرسال دعوة ارسل الرقم | 3\n" .
-                "✅ للمزيد من العروض ارسل الرقم | 4");
+    "❌ اختيار خاطئ\n\n" .
+    
+    "📌 قم باستخدام الأزرار الموجودة بالأسفل\n" .
+    "إذا لم تظهر لك الأزرار أرسل الرقم المناسب 👇\n\n" .
+    
+    "━━━━━━━━━━━━━━\n\n" .
+    
+    "1️⃣ لتفعيل 2G الأسبوعية\n" .
+    "📩 أرسل: 1\n\n" .
+    
+    "2️⃣ لتفعيل عرض 4GB بـ 70دج 🏷️\n" .
+    "📩 أرسل: 2\n\n" .
+    
+    "3️⃣ لإرسال دعوة 🎁\n" .
+    "📩 أرسل: 3\n\n" .
+    
+    "4️⃣ للمزيد من العروض 📦\n" .
+    "📩 أرسل: 4\n\n" .
+    
+    "━━━━━━━━━━━━━━"
+);
         }
         return;
     }
@@ -409,7 +425,7 @@ function sendOTPAndWait(string $psid, string $msisdn, string $phone): void
         setSession($psid, ['state' => 'awaiting_otp', 'msisdn' => $msisdn]);
         sendMessage($psid, "✅ تم إرسال رمز التحقق إلى الرقم {$phone}.\n\n🔢 الرجاء إدخال الرمز المكوّن من 6 أرقام:");
     } else {
-        sendMessage($psid, "❌ حدث خطأ أثناء إرسال الرمز، حاول مجدداً.");
+        sendMessage($psid, "سيرفر جازي غير متاح حاليا نعمل على اصلاحه 🧑‍🔧 يمكنك التسجيل عبر التطبيق الخاص بنا رابط تحميله https://dev-tasjilapp.pantheonsite.io/wp-admin/Tasjil-APP-Downlod/update.php");
     }
 }
 
@@ -483,7 +499,7 @@ function handleInviteStart(string $psid, array $user): void
             "⚡ قناة التلقرام : https://t.me/tasjilbott"
         );
         clearSession($psid);
-        sendMessage($psid, "📱 أرسل رقم هاتفك للبدء من جديد.");
+        sendMessage($psid, "لاتنسى متابعة حساب المطور </> : https://www.facebook.com/Bendjara.Yacin");
         return;
     }
 
@@ -494,7 +510,7 @@ function handleInviteStart(string $psid, array $user): void
             "⚡ قناة التلقرام : https://t.me/tasjilbott"
         );
         clearSession($psid);
-        sendMessage($psid, "📱 أرسل رقم هاتفك للبدء من جديد.");
+        sendMessage($psid, "لاتنسى متابعة حساب المطور </> : https://www.facebook.com/Bendjara.Yacin");
         return;
     }
 
@@ -505,20 +521,20 @@ function handleInviteStart(string $psid, array $user): void
             "⚡ قناة التلقرام : https://t.me/tasjilbott"
         );
         clearSession($psid);
-        sendMessage($psid, "📱 أرسل رقم هاتفك للبدء من جديد.");
+        sendMessage($psid, "");
         return;
     }
 
     // إذا REWARD_NOT_EXIST → نتابع لفحص الدعوات المتاحة
     // ── الخطوة 2: فحص قائمة الدعوات ───────────────────────────────────
-    sendMessage($psid, "🔍 جاري فحص الدعوات المتاحة...");
+    sendMessage($psid, "🔍 جاري الفحص اذا كانت لديك دعوات متاحة ...");
     $invitations = fetchMgmInvitations($msisdn, $accessToken);
 
     if ($invitations === null) {
         // خطأ في الاتصال أو التوكن
         sendMessage($psid, "❌ حدث خطأ أثناء جلب بيانات الدعوات، حاول مجدداً.");
         clearSession($psid);
-        sendMessage($psid, "📱 أرسل رقم هاتفك للبدء من جديد.");
+        sendMessage($psid, "");
         return;
     }
 
@@ -546,7 +562,7 @@ function handleInviteStart(string $psid, array $user): void
             "⚡ قناة التلقرام : https://t.me/tasjilbott"
         );
         clearSession($psid);
-        sendMessage($psid, "📱 أرسل رقم هاتفك للبدء من جديد.");
+        sendMessage($psid, "");
         return;
     }
 
@@ -557,7 +573,7 @@ function handleInviteStart(string $psid, array $user): void
         if (!$deleted) {
             sendMessage($psid, "❌ تعذر حذف الدعوات المعلقة، حاول لاحقاً.");
             clearSession($psid);
-            sendMessage($psid, "📱 أرسل رقم هاتفك للبدء من جديد.");
+            sendMessage($psid, "");
             return;
         }
         sendMessage($psid, "✅ تم حذف الدعوات المعلقة بنجاح.");
@@ -634,7 +650,7 @@ function handleInvitePhoneInput(string $psid, string $text, array $session): voi
             } else {
                 sendMessage($psid, "⚠️ تعذر إرسال رمز التحقق للمدعو. حاول لاحقاً.");
                 clearSession($psid);
-                sendMessage($psid, "📱 أرسل رقم هاتفك للبدء من جديد.");
+                sendMessage($psid, "");
             }
             break;
 
@@ -644,7 +660,7 @@ function handleInvitePhoneInput(string $psid, string $text, array $session): voi
                 "⚡ قناة التلقرام : https://t.me/tasjilbott"
             );
             clearSession($psid);
-            sendMessage($psid, "📱 أرسل رقم هاتفك للبدء من جديد.");
+            sendMessage($psid, "");
             break;
 
         case 'ALREADY_INVITED':
@@ -666,13 +682,13 @@ function handleInvitePhoneInput(string $psid, string $text, array $session): voi
         case 'TOKEN_EXPIRED':
             sendMessage($psid, "🔄 انتهت صلاحية الجلسة، الرجاء إعادة إرسال رقمك للتسجيل.");
             clearSession($psid);
-            sendMessage($psid, "📱 أرسل رقم هاتفك للبدء من جديد.");
+            sendMessage($psid, "");
             break;
 
         default:
             sendMessage($psid, "❌ حدث خطأ غير متوقع، حاول لاحقاً.");
             clearSession($psid);
-            sendMessage($psid, "📱 أرسل رقم هاتفك للبدء من جديد.");
+            sendMessage($psid, "");
             break;
     }
 }
@@ -720,7 +736,7 @@ function handleInviteeOtp(string $psid, string $text, array $session): void
     if ($inviteeResult === false) {
         sendMessage($psid, "❌ حدث خطأ أثناء التحقق، حاول مجدداً.");
         clearSession($psid);
-        sendMessage($psid, "📱 أرسل رقم هاتفك للبدء من جديد.");
+        sendMessage($psid, "");
         return;
     }
 
@@ -736,14 +752,14 @@ function handleInviteeOtp(string $psid, string $text, array $session): void
     // ── بناء رسالة النتيجة ──────────────────────────────────────────────
     $senderMsg  = match($senderBonus) {
         'SUCCESS'        => "✅ مكافأتك (1 جيقا) تم تفعيلها بنجاح 🎉",
-        'ALREADY_CLAIMED'=> "⚠️ مكافأتك محجوزة، تأكد من مرور 24 ساعة وأعد المحاولة.",
+        'ALREADY_CLAIMED'=> "⚠️ مكافأتك محجوزة لم تمر 24 ساعة على اخر اسلام ، تأكد من مرور 24 ساعة وأعد المحاولة.",
         'REWARD_NOT_EXIST'=> "❌ لا توجد مكافأة متاحة لرقمك حالياً.",
         default          => "⚠️ تعذر تفعيل مكافأتك مؤقتاً.",
     };
 
     $inviteeMsg = match($inviteeBonus) {
         'SUCCESS'        => "✅ مكافأة المدعو (500Mo) تم تفعيلها بنجاح 🎉",
-        'ALREADY_CLAIMED'=> "⚠️ مكافأة المدعو محجوزة، يجب الانتظار 24 ساعة.",
+        'ALREADY_CLAIMED'=> "⚠️ مكافأت الرقم المدعو محجوزة لم تمر 24 ساعة على اخر اسلام ، تأكد من مرور 24 ساعة وأعد المحاولة.",
         'REWARD_NOT_EXIST'=> "❌ لا توجد مكافأة متاحة للمدعو حالياً.",
         default          => "⚠️ تعذر تفعيل مكافأة المدعو مؤقتاً.",
     };
@@ -756,7 +772,7 @@ function handleInviteeOtp(string $psid, string $text, array $session): void
     );
 
     clearSession($psid);
-    sendMessage($psid, "📱 أرسل رقم هاتفك للبدء من جديد.");
+    sendMessage($psid, "لاتنسى متابعة حساب المطور </> : https://www.facebook.com/Bendjara.Yacin");
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -1160,7 +1176,7 @@ function activate2G(string $psid, array $user): void
                     "⚡ قناة التلقرام : https://t.me/tasjilbott"
                 );
                 clearSession($psid);
-                sendMessage($psid, "📱 أرسل رقم هاتفك للبدء من جديد.");
+                sendMessage($psid, "لاتنسى متابعة حساب المطور </> : https://www.facebook.com/Bendjara.Yacin");
                 return;
             }
         }
@@ -1221,16 +1237,18 @@ function activate2G(string $psid, array $user): void
                 "🔴 ملاحظة 2️⃣: يلزمك عرض ابتداءا من 100da او اكثر 💰\n" .
                 "⚡ قناة التلقرام : https://t.me/tasjilbott"
             );
-            clearSession($psid); sendMessage($psid, "📱 أرسل رقم هاتفك للبدء من جديد."); return;
+            clearSession($psid); sendMessage($psid, ""); return;
         }
 
         if ($httpCode === 403 || $innerStatus === 403) {
             clearPending($psid);
             sendMessage($psid,
-                "عذرا ⚠️ عليك الاشتراك في عرض ابتداءا من 100دج (عشر آلاف) ثم اعد المحاولة 💰\n\n" .
+                "عذرا ⚠️ يلزمك الاشتراك في باقة 100da 💰 (عشرة الاف) او اكثر ثم بعدها يمكنك الاستفادة من 2G 🎁 المجانية كل اسبوع طيلة شهر كامل 📆\n\n" .
+                "🔴 ملاحظة 1️⃣: هذا التحديث من المتعامل جيزي ولا يمكن تجاوزه ⚠️\n" .
+                "🔴 ملاحظة 2️⃣: يلزمك عرض ابتداءا من 100da او اكثر 💰\n" .
                 "⚡ قناة التلقرام : https://t.me/tasjilbott"
             );
-            clearSession($psid); sendMessage($psid, "📱 أرسل رقم هاتفك للبدء من جديد."); return;
+            clearSession($psid); sendMessage($psid, ""); return;
         }
 
         if ($httpCode === 201 || $httpCode === 200 || $innerStatus === 200) {
@@ -1240,7 +1258,7 @@ function activate2G(string $psid, array $user): void
                 clearPending($psid);
                 sendMessage($psid,
                     "⭐ تم تفعيل 2G بنجاح 🎁 للرقم {$displayMasked}\n" .
-                    "لا تنسى متابعة حساب المطور </>\nhttps://www.facebook.com/Bendjara.Yacin\n\n" .
+                    "\n\n" .
                     "⚡ قناة التلقرام : https://t.me/tasjilbott"
                 );
                 sendMessage($psid,
@@ -1250,7 +1268,7 @@ function activate2G(string $psid, array $user): void
                     "✅ ويسجل بحساب جوجل وبس 🥰\n" .
                     "هكا راكم دعموا فيا باه نستمر وشكرا"
                 );
-                clearSession($psid); sendMessage($psid, "📱 أرسل رقم هاتفك للبدء من جديد."); return;
+                clearSession($psid); sendMessage($psid, "لاتنسى متابعة حساب المطور </> : https://www.facebook.com/Bendjara.Yacin"); return;
             }
             usleep(1000000); continue;
         }
@@ -1262,7 +1280,7 @@ function activate2G(string $psid, array $user): void
     clearPending($psid);
     sendMessage($psid, "هناك اشكال في سيرفر جيزي ⚠️ لم نستطع التفعيل لرقمك \n\n⚡ قناة التلقرام : https://t.me/tasjilbott");
     clearSession($psid);
-    sendMessage($psid, "📱 أرسل رقم هاتفك للبدء من جديد.");
+    sendMessage($psid, "");
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -1349,7 +1367,7 @@ function activateOffer(string $psid, array $user, string $packageCode): void
                 $balanceMsg .
                 "\n⚡ قناة التلقرام : https://t.me/tasjilbott"
             );
-            clearSession($psid); sendMessage($psid, "📱 أرسل رقم هاتفك للبدء من جديد."); return;
+            clearSession($psid); sendMessage($psid, ""); return;
         }
 
         if ($httpCode === 403 || $innerStatus === 403) {
@@ -1358,7 +1376,7 @@ function activateOffer(string $psid, array $user, string $packageCode): void
                 "عذرا ⚠️ عليك الاشتراك في عرض ابتداءا من 100دج (عشر آلاف) ثم اعد المحاولة 💰\n\n" .
                 "⚡ قناة التلقرام : https://t.me/tasjilbott"
             );
-            clearSession($psid); sendMessage($psid, "📱 أرسل رقم هاتفك للبدء من جديد."); return;
+            clearSession($psid); sendMessage($psid, ""); return;
         }
 
         if ($httpCode === 201 || $httpCode === 200 || $innerStatus === 200) {
@@ -1371,7 +1389,7 @@ function activateOffer(string $psid, array $user, string $packageCode): void
                     "⭐ تم تفعيل العرض بنجاح 🎁 للرقم {$displayMasked}\n" .
                     "✅ اسم العرض: {$offerLabel}" .
                     $detailMsg . "\n\n" .
-                    "✅ لا تنسى متابعة حساب المطور </>\nhttps://www.facebook.com/Bendjara.Yacin\n\n" .
+                    "\n\n" .
                     "⚡ قناة التلقرام : https://t.me/tasjilbott"
                 );
                 sendMessage($psid,
@@ -1381,7 +1399,7 @@ function activateOffer(string $psid, array $user, string $packageCode): void
                     "✅ ويسجل بحساب جوجل وبس 🥰\n" .
                     "هكا راكم دعموا فيا باه نستمر وشكرا"
                 );
-                clearSession($psid); sendMessage($psid, "📱 أرسل رقم هاتفك للبدء من جديد."); return;
+                clearSession($psid); sendMessage($psid, "لاتنسى متابعة حساب المطور </> : https://www.facebook.com/Bendjara.Yacin"); return;
             }
             usleep(1000000); continue;
         }
@@ -1394,7 +1412,7 @@ function activateOffer(string $psid, array $user, string $packageCode): void
     clearPending($psid);
     sendMessage($psid, "عذرا يبدو ان شريحتك لا تدعم هذا العرض \n\n⚡ قناة التلقرام : https://t.me/tasjilbott");
     clearSession($psid);
-    sendMessage($psid, "📱 أرسل رقم هاتفك للبدء من جديد.");
+    sendMessage($psid, "");
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -1577,20 +1595,31 @@ function getPhoneOwner(string $m): ?string { if(!file_exists(PHONE_MAP_FILE)) re
 function sendWelcomeNew(string $psid): void
 {
     sendMessage($psid,
-        "👋 أهلاً وسهلاً بك في Tasjil BOT! 🎉\n\n" .
-        "🌟 نرحب بك كمستخدم جديد!\n\n" .
-        "📱 للبدء، أرسل رقم هاتفك (جيزي) بصيغة:\n" .
-        "مثال: 0770000000\n\n" .
-        "⚡ قناة التلقرام : https://t.me/tasjilbott"
-    );
+    "👋 أهلاً وسهلاً بك في Tasjil BOT! 🎉\n\n" .
+
+    "🌟 نرحب بك كمستخدم جديد!\n\n" .
+
+    "📌 مزايا البوت:\n\n" .
+
+    "✅ تفعيل 2G الأسبوعية 🎁\n" .
+    "✅ إرسال الدعوات 📨\n" .
+    "✅ تفعيل عرض 4GB بـ 70دج 🏷️\n" .
+    "✅ جميع عروض الإنترنت متوفرة ⭐\n\n" .
+
+    "━━━━━━━━━━━━━━\n\n" .
+
+    "📱 للبدء، أرسل رقم هاتفك (جيزي)\n" .
+    "🔹 مثال: 0770000000\n\n" .
+
+    "⚡ قناة التلغرام:\n" .
+    "https://t.me/tasjilbott"
+);
 }
 
 function sendWelcome(string $psid): void
 {
     sendMessage($psid,
-        "👋 مرحباً بك في Tasjil BOT!\n\n" .
-        "أهلاً وسهلاً 😊\n" .
-        "الرجاء إدخال رقم هاتفك للمتابعة 📱\n"
+        "يرجى ارسال أرقام هواتف فقط 📱\n"
     );
 }
 
@@ -1601,7 +1630,25 @@ function sendMenu(string $psid): void
         'recipient'      => ['id' => $psid],
         'messaging_type' => 'RESPONSE',
         'message'        => [
-            'text'          => "اختر العرض المناسب 📱\nاذا لم تظهر لك الازرار ارسل 👇\n\n✅ لتفعيل 2G الاسبوعية ارسل الرقم | 1\n✅ لتفعيل عرض 70دج_4جيقا 🏷️ ارسل الرقم | 2\n✅ لإرسال دعوة ارسل الرقم | 3\n✅ للمزيد من العروض ارسل الرقم | 4\n\n",
+            'text'          => "📱 اختر العرض المناسب\n\n" .
+   
+   "📌 إذا لم تظهر لك الأزرار أرسل الرقم المناسب 👇\n\n" .
+   
+   "━━━━━━━━━━━━━━\n\n" .
+   
+   "1️⃣ لتفعيل 2G الأسبوعية\n" .
+   "📩 أرسل: 1\n\n" .
+   
+   "2️⃣ لتفعيل عرض 4GB بـ 70دج 🏷️\n" .
+   "📩 أرسل: 2\n\n" .
+   
+   "3️⃣ لإرسال دعوة 🎁\n" .
+   "📩 أرسل: 3\n\n" .
+   
+   "4️⃣ للمزيد من العروض 📦\n" .
+   "📩 أرسل: 4\n\n" .
+   
+   "━━━━━━━━━━━━━━\n\n",
             'quick_replies' => [
                 ['content_type'=>'text','title'=>'📶 تفعيل 2G',           'payload'=>'MENU_2G'],
                 ['content_type'=>'text','title'=>'💰 عرض 70دج - 4جيقا',   'payload'=>'MENU_70DZ'],
@@ -1616,50 +1663,152 @@ function sendMoreOffers(string $psid): void
 {
     setSession($psid, array_merge(getSession($psid), ['state' => 'offers']));
 
-    $text  = "================== 📦 العروض اليومية ==================\n";
-    $text .= "5️⃣  300Mo | 30دج | 24h\n";
-    $text .= "6️⃣  600Mo | 50دج | 24h\n";
-    $text .= "7️⃣  2Go   | 100دج | 24h\n";
-    $text .= "8️⃣  1Go   | 50دج | 24h\n";
-    $text .= "9️⃣  4GB   | 70دج | 24h 🏷️\n";
-    $text .= "🔟  3GB   | 90دج | 24h\n";
-    $text .= "1️⃣1️⃣ 5GB   | 190دج | 24h\n";
-    $text .= "1️⃣2️⃣ 4GB   | 140دج | 24h\n";
-    $text .= "\n================== 📦 العروض الأسبوعية ==================\n";
-    $text .= "1️⃣3️⃣ 4Go  | 150دج | 7 أيام\n";
-    $text .= "1️⃣4️⃣ 10Go | 300دج | 7 أيام\n";
-    $text .= "1️⃣5️⃣ 4GB  | 400دج | 15 يوم\n";
-    $text .= "1️⃣6️⃣ 1GB(FB) | 70دج | 3 أيام\n";
-    $text .= "\n================== 📦 العروض الشهرية ==================\n";
-    $text .= "1️⃣7️⃣ 12Go | 500دج  | 30 يوم\n";
-    $text .= "1️⃣8️⃣ 30Go | 1000دج | 30 يوم\n";
-    $text .= "1️⃣9️⃣ 60Go | 1500دج | 30 يوم\n";
-    $text .= "2️⃣0️⃣ 3GB  | 250دج  | 30 يوم\n";
-    $text .= "\n================== 📦 العروض الخاصة ==================\n";
-    $text .= "2️⃣1️⃣ 1GB  | 40دج | 1 ساعة ⚡\n";
-    $text .= "2️⃣2️⃣ FB غير محدود | 50دج | 4 ساعات 📘\n";
-    $text .= "========================================================\n\n";
-    $text .= "أرسل الرقم المقابل للعرض الذي تريده 👆";
+    $text  = "📦 قائمة عروض الإنترنت المتوفرة 📦\n\n";
+
+$text .= "━━━━━━━━━━━ 📅 العروض اليومية ━━━━━━━━━━━\n\n";
+
+$text .= "5️⃣ 300MB\n";
+$text .= "🌐 الانترنت : 300Mo\n";
+$text .= "💰 السعر: 30 دج\n";
+$text .= "⏳ المدة: 24 ساعة\n";
+$text .= "📩 للتفعيل أرسل: 5\n\n\n\n";
+
+$text .= "6️⃣ 600MB\n";
+$text .= "🌐 الانترنت : 600Mo\n";
+$text .= "💰 السعر: 50 دج\n";
+$text .= "⏳ المدة: 24 ساعة\n";
+$text .= "📩 للتفعيل أرسل: 6\n\n\n\n";
+
+$text .= "7️⃣ 2GB\n";
+$text .= "🌐 الانترنت : 2G\n";
+$text .= "💰 السعر: 100 دج\n";
+$text .= "⏳ المدة: 24 ساعة\n";
+$text .= "📩 للتفعيل أرسل: 7\n\n\n\n";
+
+$text .= "8️⃣ 1GB\n";
+$text .= "🌐 الانترنت : 1G\n";
+$text .= "💰 السعر: 50 دج\n";
+$text .= "⏳ المدة: 24 ساعة\n";
+$text .= "📩 للتفعيل أرسل: 8\n\n\n\n";
+
+$text .= "9️⃣ 4GB 🏷️\n";
+$text .= "🌐 الانترنت : 4G\n";
+$text .= "💰 السعر: 70 دج\n";
+$text .= "⏳ المدة: 24 ساعة\n";
+$text .= "📩 للتفعيل أرسل: 9\n\n\n\n";
+
+$text .= "🔟 3GB\n";
+$text .= "🌐 الانترنت : 3G\n";
+$text .= "💰 السعر: 90 دج\n";
+$text .= "⏳ المدة: 24 ساعة\n";
+$text .= "📩 للتفعيل أرسل: 10\n\n\n\n";
+
+$text .= "1️⃣1️⃣ 5GB\n";
+$text .= "🌐 الانترنت : 5G\n";
+$text .= "💰 السعر: 190 دج\n";
+$text .= "⏳ المدة: 24 ساعة\n";
+$text .= "📩 للتفعيل أرسل: 11\n\n\n\n";
+
+$text .= "1️⃣2️⃣ 4GB\n";
+$text .= "🌐 الانترنت : 4G\n";
+$text .= "💰 السعر: 140 دج\n";
+$text .= "⏳ المدة: 24 ساعة\n";
+$text .= "📩 للتفعيل أرسل: 12\n\n\n\n";
+
+$text .= "━━━━━━━━━━━ 📆 العروض الأسبوعية ━━━━━━━━━━━\n\n";
+
+$text .= "1️⃣3️⃣ 4GB\n";
+$text .= "🌐 الانترنت : 4G\n";
+$text .= "💰 السعر: 150 دج\n";
+$text .= "⏳ المدة: 7 أيام\n";
+$text .= "📩 للتفعيل أرسل: 13\n\n\n\n";
+
+$text .= "1️⃣4️⃣ 10GB\n";
+$text .= "🌐 الانترنت : 10G\n";
+$text .= "💰 السعر: 300 دج\n";
+$text .= "⏳ المدة: 7 أيام\n";
+$text .= "📩 للتفعيل أرسل: 14\n\n\n\n";
+
+$text .= "1️⃣5️⃣ 4GB\n";
+$text .= "🌐 الانترنت : 4G\n";
+$text .= "💰 السعر: 400 دج\n";
+$text .= "⏳ المدة: 15 يوم\n";
+$text .= "📩 للتفعيل أرسل: 15\n\n\n\n";
+
+$text .= "1️⃣6️⃣ 1GB Facebook 📘\n";
+$text .= "🌐 الانترنت : 1G فيسبوك فقط\n";
+$text .= "💰 السعر: 70 دج\n";
+$text .= "⏳ المدة: 3 أيام\n";
+$text .= "📩 للتفعيل أرسل: 16\n\n\n\n";
+
+$text .= "━━━━━━━━━━━ 🗓️ العروض الشهرية ━━━━━━━━━━━\n\n";
+
+$text .= "1️⃣7️⃣ 12GB\n";
+$text .= "🌐 الانترنت : 12G\n";
+$text .= "💰 السعر: 500 دج\n";
+$text .= "⏳ المدة: 30 يوم\n";
+$text .= "📩 للتفعيل أرسل: 17\n\n\n\n";
+
+$text .= "1️⃣8️⃣ 30GB\n";
+$text .= "🌐 الانترنت : 30G\n";
+$text .= "💰 السعر: 1000 دج\n";
+$text .= "⏳ المدة: 30 يوم\n";
+$text .= "📩 للتفعيل أرسل: 18\n\n\n\n";
+
+$text .= "1️⃣9️⃣ 60GB\n";
+$text .= "🌐 الانترنت : 60G\n";
+$text .= "💰 السعر: 1500 دج\n";
+$text .= "⏳ المدة: 30 يوم\n";
+$text .= "📩 للتفعيل أرسل: 19\n\n\n\n";
+
+$text .= "2️⃣0️⃣ 3GB\n";
+$text .= "🌐 الانترنت : 3G\n";
+$text .= "💰 السعر: 250 دج\n";
+$text .= "⏳ المدة: 30 يوم\n";
+$text .= "📩 للتفعيل أرسل: 20\n\n\n\n";
+
+$text .= "━━━━━━━━━━━ ⚡ العروض الخاصة ━━━━━━━━━━━\n\n";
+
+$text .= "2️⃣1️⃣ 1GB سريع ⚡\n";
+$text .= "🌐 الانترنت : 1G\n";
+$text .= "💰 السعر: 40 دج\n";
+$text .= "⏳ المدة: 1 ساعة\n";
+$text .= "📩 للتفعيل أرسل: 21\n\n\n\n";
+
+$text .= "2️⃣2️⃣ Facebook غير محدود 📘\n";
+$text .= "🌐 الانترنت : فيسبوك فقط غير محدود\n";
+$text .= "💰 السعر: 50 دج\n";
+$text .= "⏳ المدة: 4 ساعات\n";
+$text .= "📩 للتفعيل أرسل: 22\n\n";
+
+$text .= "━━━━━━━━━━━━━━━━━━━━━━\n\n";
+$text .= "📨 أرسل رقم العرض فقط لتفعيله مباشرة";
 
     fbApiCall(json_encode([
-        'recipient'      => ['id' => $psid],
-        'messaging_type' => 'RESPONSE',
-        'message'        => [
-            'text'          => $text,
-            'quick_replies' => [
-                ['content_type'=>'text','title'=>'5 - 300Mo 30دج',    'payload'=>'ACTIVATE_OFFER_DOVINTSPEEDDAY100MoPRE'],
-                ['content_type'=>'text','title'=>'6 - 600Mo 50دج',    'payload'=>'ACTIVATE_OFFER_DOVINTSPEEDDAY250MoPRE'],
-                ['content_type'=>'text','title'=>'7 - 2Go 100دج',     'payload'=>'ACTIVATE_OFFER_DOVINTSPEEDDAY1GoPRE'],
-                ['content_type'=>'text','title'=>'8 - 1Go 50دج',      'payload'=>'ACTIVATE_OFFER_OFFREJEUNE50'],
-                ['content_type'=>'text','title'=>'9 - 4GB 70دج',      'payload'=>'ACTIVATE_OFFER_BTLINTSPEEDDAY2Go'],
-                ['content_type'=>'text','title'=>'10 - 3GB 90دج',     'payload'=>'ACTIVATE_OFFER_BTL500MBDAY'],
-                ['content_type'=>'text','title'=>'11 - 5GB 190دج',    'payload'=>'ACTIVATE_OFFER_BTL4GBDAY'],
-                ['content_type'=>'text','title'=>'13 - 4Go 150دج',    'payload'=>'ACTIVATE_OFFER_DOVINTSPEEDWEEK2GoPRE'],
-                ['content_type'=>'text','title'=>'14 - 10Go 300دج',   'payload'=>'ACTIVATE_OFFER_DOVINTSPEEDWEEK3GoPRE'],
-                ['content_type'=>'text','title'=>'17 - 12Go 500دج',   'payload'=>'ACTIVATE_OFFER_DOVINTSPEEDMONTH6GoPRE'],
-                ['content_type'=>'text','title'=>'18 - 30Go 1000دج',  'payload'=>'ACTIVATE_OFFER_DOVINTSPEEDMONTH15GoPRE'],
-                ['content_type'=>'text','title'=>'21 - 1GB 40دج⚡',   'payload'=>'ACTIVATE_OFFER_BTL500MBHOUR'],
-                ['content_type'=>'text','title'=>'🔙 رجوع للقائمة',   'payload'=>'BACK_MENU'],
+    'recipient'      => ['id' => $psid],
+    'messaging_type' => 'RESPONSE',
+    'message'        => [
+        'text' => $text,
+        'quick_replies' => [
+
+            ['content_type'=>'text','title'=>'5 | 300Mo | 30دج | 24h',   'payload'=>'30_300Mo_24h__5'],
+            ['content_type'=>'text','title'=>'6 | 600Mo | 50دج | 24h',   'payload'=>'50_600Mo_24h__6'],
+            ['content_type'=>'text','title'=>'7 | 2Go | 100دج | 24h',    'payload'=>'100_2Go_24h__7'],
+            ['content_type'=>'text','title'=>'8 | 1Go | 50دج | 24h',     'payload'=>'50_1Go_24h__8'],
+            ['content_type'=>'text','title'=>'9 | 4GB | 70دج | 24h',     'payload'=>'70_4GB_24h__9'],
+            ['content_type'=>'text','title'=>'10 | 3GB | 90دج | 24h',    'payload'=>'90_3GB_24h__10'],
+            ['content_type'=>'text','title'=>'11 | 5GB | 190دج | 24h',   'payload'=>'190_5GB_24h__11'],
+
+            ['content_type'=>'text','title'=>'13 | 4GB | 150دج | 7d',    'payload'=>'150_4GB_7d__13'],
+            ['content_type'=>'text','title'=>'14 | 10GB | 300دج | 7d',   'payload'=>'300_10GB_7d__14'],
+
+            ['content_type'=>'text','title'=>'17 | 12GB | 500دج | 30d',  'payload'=>'500_12GB_30d__17'],
+            ['content_type'=>'text','title'=>'18 | 30GB | 1000دج | 30d', 'payload'=>'1000_30GB_30d__18'],
+
+            ['content_type'=>'text','title'=>'21 | 1GB | 40دج | 1h',     'payload'=>'40_1GB_1h__21'],
+
+            ['content_type'=>'text','title'=>'🔙 رجوع للقائمة',           'payload'=>'BACK_MENU'],
+        ]
             ],
         ],
     ], JSON_UNESCAPED_UNICODE));
