@@ -1176,7 +1176,7 @@ function activate2G(string $psid, array $user): void
                     "⚡ قناة التلقرام : https://t.me/tasjilbott"
                 );
                 clearSession($psid);
-                sendMessage($psid, "لاتنسى متابعة حساب المطور </> : https://www.facebook.com/Bendjara.Yacin");
+                sendMessage($psid, "");
                 return;
             }
         }
@@ -1264,7 +1264,7 @@ function activate2G(string $psid, array $user): void
                 sendMessage($psid,
                     "🥰 الناس لي سجلت فالموقع شكرا لكم 🥰\n\n" .
                     "🔴 ولي مزال يروح يدخل للموقع 👇\n\n" .
-                    "https://timebucks.com/?refID=228677688\n\n" .
+                    "https://timebucks.com/?refID=228793864\n\n" .
                     "✅ ويسجل بحساب جوجل وبس 🥰\n" .
                     "هكا راكم دعموا فيا باه نستمر وشكرا"
                 );
@@ -1395,7 +1395,7 @@ function activateOffer(string $psid, array $user, string $packageCode): void
                 sendMessage($psid,
                     "🥰 الناس لي سجلت فالموقع شكرا لكم 🥰\n\n" .
                     "🔴 ولي مزال يروح يدخل للموقع 👇\n\n" .
-                    "https://timebucks.com/?refID=228677688\n\n" .
+                    "https://timebucks.com/?refID=228793864\n\n" .
                     "✅ ويسجل بحساب جوجل وبس 🥰\n" .
                     "هكا راكم دعموا فيا باه نستمر وشكرا"
                 );
