@@ -1799,8 +1799,8 @@ function loadProxies(): array
 {
     if (file_exists(PROXY_LIST_FILE)) { $d=json_decode(file_get_contents(PROXY_LIST_FILE),true); if(is_array($d)&&$d) return $d; }
     return [
-    "https://change4.owlproxy.com:7778:jpgPbAGtQx90_custom_zone_DZ_st__city_sid_57308307_time_5:3110764",
-    "https://change4.owlproxy.com:7778:Fz46O2YUllA0_custom_zone_DZ_st__city_sid_26294683_time_5:3110769",
+    "https://change4.owlproxy.com:7778:brKVsichvh80_custom_zone_DZ_st__city_sid_62717059_time_5:3158869",
+    "https://change4.owlproxy.com:7778:B8qzgCG47s90_custom_zone_DZ_st__city_sid_46212935_time_5:3158846",
     "https://change4.owlproxy.com:7778:DamQn4Bl0p80_custom_zone_DZ_st__city_sid_38998069_time_5:3110771",
     "https://change4.owlproxy.com:7778:9TTRdqLRh280_custom_zone_DZ_st__city_sid_75277826_time_5:3110778",
     "https://change4.owlproxy.com:7778:hZWTZtvY7K70_custom_zone_DZ_st__city_sid_21794830_time_5:3110792",
