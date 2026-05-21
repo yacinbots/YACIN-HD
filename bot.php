@@ -4,7 +4,7 @@
 // الإعدادات
 // ════════════════════════════════════════════════════════════════════════════
 
-define('FB_TOKEN',      'EAAFYLlWaXQkBRghZCFuzj9G0sigyS10BdCZClE7V8wcvub8IsXuAoSRrP8ei2ZBEMP2N3BZBlMo8I4QdLXsiZCSyF1TD1DhVPRf2SPZCtKGPFCz598zqjJOwIuGznXTKkbPu38X9ZAD7PflnX1VOoWkkjFhC6xZAOJ8ZADxRkjEBlSzWf0yKtUx3QhdTzoA4ksBa1Ok8ofBrHsAZDZD');
+define('FB_TOKEN',      'EAAFYLlWaXQkBRipdbVBRHutC6ZCbjnTR0nZA6TjHw8g1cVB7WiMRnt0SLVS1dcZAlqfov8Ejo9sshLdI4vyBrRYE2Hqczzn3hrng1nZCnamvGlGeK9AOA7vUTaAG1ZCJcThDZA0eZCNpOfYAbTptfcMahx6MtAC01Q2vZAcIsxfHZB6KR8MtKeaoSwr7k27OC0m7cqJdkEepWfQZDZD');
 define('VERIFY_TOKEN',  'Yacin');
 define('CHAT_API_URL',  'http://de3.bot-hosting.net:21007/kilwa-chatgpt');
 define('IMAGE_API_URL', 'http://de3.bot-hosting.net:21007/kilwa-gpt-img');
