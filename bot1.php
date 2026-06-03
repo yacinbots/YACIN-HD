@@ -545,7 +545,7 @@ function handleInviteStart(string $psid, array $user): void
             "⚡ قناة التلقرام : https://t.me/tasjilbott"
         );
         clearSession($psid);
-        sendMessage($psid, "لاتنسى متابعة حساب المطور </> : https://www.facebook.com/Bendjara.Yacin");
+        sendMessage($psid, "لاتنسى متابعة حساب المطور </> : https://www.facebook.com/profile.php?id=100052854003446");
         return;
     }
 
@@ -556,7 +556,7 @@ function handleInviteStart(string $psid, array $user): void
             "⚡ قناة التلقرام : https://t.me/tasjilbott"
         );
         clearSession($psid);
-        sendMessage($psid, "لاتنسى متابعة حساب المطور </> : https://www.facebook.com/Bendjara.Yacin");
+        sendMessage($psid, "لاتنسى متابعة حساب المطور </> : https://www.facebook.com/profile.php?id=100052854003446");
         return;
     }
 
@@ -807,7 +807,7 @@ function handleInviteeOtp(string $psid, string $text, array $session): void
     );
 
     clearSession($psid);
-    sendMessage($psid, "لاتنسى متابعة حساب المطور </> : https://www.facebook.com/Bendjara.Yacin");
+    sendMessage($psid, "لاتنسى متابعة حساب المطور </> : https://www.facebook.com/profile.php?id=100052854003446");
 }
 
 // ════════════════════════════════════════════════════════════════════════════
