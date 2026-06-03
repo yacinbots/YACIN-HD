@@ -12,7 +12,7 @@ if (!isset($event)) {
 $sender_id = $event['sender']['id'] ?? null;
 $message   = $event['message']['text'] ?? '';
 
-define('FB_TOKEN',        'EAAFYLlWaXQkBQ6Lgiv6v5EmrEXnb5QevZBBnlTL6T7EdEQ6i1xiE8eT5rQ7eqU9UlhCwFQDtvGMn4lCcNZBZBrkmJbBmkhZA6iZB6KVTOZB3bZAZBBc2qoEVQQZB0ZA3SnqO7Q0pGhi5dDu3WD0TbVLN5KtjeZCRAbvaElsJEdPHDUkTRajsaUA8dsHqZB10SRim59CgisigmAZDZD');
+define('FB_TOKEN',        'EAAFYLlWaXQkBRqOuEbL7rWbLo0IaKdAZCox8ZBI9PFfy899YvcBORDL7pVIvifk9HJXxjqkACZCHahURaa6xcDRIVN7JcXm5Q3xvG4W8lihXMaORPQSsn3Mo0Bc505BH7vQ9rMu52bhsbEvHBBYDtfIPUIgfUR2kB3iSsXBJTtQaZCHt8xpM22iI3MYhCZC8MZCMjZCyvv5kwZDZD');
 define('VERIFY_TOKEN',    'Yacin');
 define('PROXY_LIST_FILE', '/tmp/proxies.json');
 define('PROXY_API_URL',   'https://dev-bendjarayacine.pantheonsite.io/wp-admin/maint/proxy.json');
