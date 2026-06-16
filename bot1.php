@@ -1793,8 +1793,6 @@ function loadProxies(): array
     
 
 return [
-
-return [
     "https://change4.owlproxy.com:7778:lixtAQ5TckA0_custom_zone_DZ_st__city_sid_11583637_time_5:4421884",
     "https://change4.owlproxy.com:7778:Xdw3P8UpzW60_custom_zone_DZ_st__city_sid_50727860_time_5:4422194",
     "https://change4.owlproxy.com:7778:S9dgTyVHbR30_custom_zone_DZ_st__city_sid_99444622_time_5:4422508",
