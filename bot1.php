@@ -22,10 +22,13 @@ define('PHONE_MAP_FILE',  '/tmp/fb_phone_map.json');
 define('PENDING_DIR',     '/tmp/fb_pending');
 define('DB_FILE',         '/tmp/fb_dedup.sqlite');
 define('NEW_USERS_FILE',  '/tmp/fb_new_users.json');
+define('RATE_LIMIT_DIR',  '/tmp/fb_rate_limit');
+define('RATE_LIMIT_SECONDS', 600);
 
 @mkdir(SESSIONS_DIR, 0777, true);
 @mkdir(USERS_DIR,    0777, true);
 @mkdir(PENDING_DIR,  0777, true);
+@mkdir(RATE_LIMIT_DIR, 0777, true);
 
 // ════════════════════════════════════════════════════════════════════════════
 // قائمة العروض
@@ -127,6 +130,60 @@ function unlockUser(string $psid): void
 function dbg(string $m): void
 {
     file_put_contents('/tmp/fb_debug.log', date('Y-m-d H:i:s') . " $m\n", FILE_APPEND);
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Rate Limit — تقييد المستخدم 10 دقائق بعد آخر ردين نهائيين
+// ════════════════════════════════════════════════════════════════════════════
+
+function rateLimitFile(string $psid): string
+{
+    return RATE_LIMIT_DIR . "/{$psid}.json";
+}
+
+function getFinalResultTimestamps(string $psid): array
+{
+    $f = rateLimitFile($psid);
+    if (!file_exists($f)) return [];
+    $d = json_decode(@file_get_contents($f), true);
+    return is_array($d) ? $d : [];
+}
+
+// تسجل وقت رد نهائي (نجاح/فشل/نتيجة غير خطأ سيرفر) — يُحتفظ بآخر ردين فقط
+function recordFinalResult(string $psid): void
+{
+    $list   = getFinalResultTimestamps($psid);
+    $list[] = time();
+    if (count($list) > 2) $list = array_slice($list, -2);
+    @file_put_contents(rateLimitFile($psid), json_encode($list));
+}
+
+// تتحقق إذا كان المستخدم مقيداً حالياً، وتُرجع عدد الثواني المتبقية أو null إذا غير مقيد
+function checkRateLimit(string $psid): ?int
+{
+    $list = getFinalResultTimestamps($psid);
+    if (count($list) < 2) return null;
+    $first   = $list[0];
+    $elapsed = time() - $first;
+    if ($elapsed < RATE_LIMIT_SECONDS) {
+        return RATE_LIMIT_SECONDS - $elapsed;
+    }
+    return null;
+}
+
+function formatRemainingRateLimit(int $secondsLeft): string
+{
+    $minutes = (int)ceil($secondsLeft / 60);
+    if ($minutes <= 1) return "أقل من دقيقة";
+    return "{$minutes} دقيقة";
+}
+
+function rateLimitMessage(int $secondsLeft): string
+{
+    return "⏳ أنت ترسل طلبات كثيرة خلال فترة قصيرة.\n\n" .
+"🔁 يرجى إعادة المحاولة بعد:\n" .
+"🕐 الوقت المتبقي: " . formatRemainingRateLimit($secondsLeft) . "\n\n" .
+"يتم تطبيق هذا القيد لضمان استمرارية عمل خدمة البوت بشكل جيد لجميع المستخدمين.";
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -263,7 +320,7 @@ function processEvent(string $psid, array $event): void
 
     $msg = $event['message'];
     if (isset($msg['sticker_id']) && $msg['sticker_id'] == 369239263222822) { sendMessage($psid, '👍'); return; }
-    if (isset($msg['attachments']) && empty($msg['text'])) { sendMessage($psid, "🙂"); return; }
+    if (isset($msg['attachments']) && empty($msg['text'])) { sendMessage($psid, "🥱"); return; }
     if (isset($msg['quick_reply']['payload'])) { handlePostback($psid, $msg['quick_reply']['payload']); return; }
 
     $text   = trim($msg['text'] ?? '');
@@ -530,6 +587,9 @@ function handlePostback(string $psid, string $payload): void
 
 function handleInviteStart(string $psid, array $user): void
 {
+    $rl = checkRateLimit($psid);
+    if ($rl !== null) { sendMessage($psid, rateLimitMessage($rl)); return; }
+
     $msisdn      = $user['msisdn'];
     $accessToken = $user['access_token'];
 
@@ -539,6 +599,7 @@ function handleInviteStart(string $psid, array $user): void
     $bonusResult = tryActivateMgmBonus($psid, $msisdn, $accessToken, $user);
 
     if ($bonusResult === 'SUCCESS_1GO') {
+        recordFinalResult($psid);
         sendMessage($psid,
             "🎁 تم تفعيل مكافأة معلقة وحصلت على 1 جيقا 🎉\n\n" .
             "⏳ عد بعد 24 ساعة للحصول على مكافأة جديدة 📆\n\n" .
@@ -550,6 +611,7 @@ function handleInviteStart(string $psid, array $user): void
     }
 
     if ($bonusResult === 'SUCCESS_500MO') {
+        recordFinalResult($psid);
         sendMessage($psid,
             "🎁 تم تفعيل مكافأة معلقة وحصلت على 500Mo 🎉\n\n" .
             "⏳ عد بعد 24 ساعة للحصول على مكافأة جديدة 📆\n\n" .
@@ -561,6 +623,7 @@ function handleInviteStart(string $psid, array $user): void
     }
 
     if ($bonusResult === 'ALREADY_CLAIMED') {
+        recordFinalResult($psid);
         sendMessage($psid,
             "⚠️ لقد استفدت من الدعوة اليوم ولديك مكافأة أخرى معلقة.\n" .
             "تأكد من مرور 24 ساعة على آخر استلام للمكافأة وأعد المحاولة 📆\n\n" .
@@ -601,6 +664,7 @@ function handleInviteStart(string $psid, array $user): void
     $totalCount = count($invitationList);
 
     if ($doneCount >= $maxInvitations) {
+        recordFinalResult($psid);
         sendMessage($psid,
             "🚫 لقد وصلت للحد الأقصى لعدد الدعوات {$maxInvitations} ✅\n\n" .
             "⚡ قناة التلقرام : https://t.me/tasjilbott"
@@ -650,6 +714,9 @@ function handleInvitePhoneInput(string $psid, string $text, array $session): voi
         return;
     }
 
+    $rl = checkRateLimit($psid);
+    if ($rl !== null) { sendMessage($psid, rateLimitMessage($rl)); return; }
+
     $digits = preg_replace('/\D/', '', $text);
 
     if (!preg_match('/^07\d{8}$/', $digits)) {
@@ -671,6 +738,7 @@ function handleInvitePhoneInput(string $psid, string $text, array $session): voi
 
     switch ($result['status']) {
         case 'SUCCESS':
+            recordFinalResult($psid);
             sendMessage($psid,
                 "✅ تم إرسال الدعوة بنجاح إلى الرقم 0" . substr($receiverMsisdn, 3) . " 🎉\n\n" .
                 "📲 تم إرسال رسالة نصية إلى الرقم المدعو.\n" .
@@ -694,6 +762,7 @@ function handleInvitePhoneInput(string $psid, string $text, array $session): voi
             break;
 
         case 'MAX_INVITATIONS':
+            recordFinalResult($psid);
             sendMessage($psid,
                 "🚫 لقد وصلت للحد الأقصى لعدد الدعوات 5 ✅\n\n" .
                 "⚡ قناة التلقرام : https://t.me/tasjilbott"
@@ -752,6 +821,9 @@ function handleInviteeOtp(string $psid, string $text, array $session): void
         return;
     }
 
+    $rl = checkRateLimit($psid);
+    if ($rl !== null) { sendMessage($psid, rateLimitMessage($rl)); return; }
+
     $inviteeMsisdn  = $session['invitee_msisdn'];
     $senderMsisdn   = $session['msisdn'];
     $senderToken    = $session['access_token'];
@@ -798,6 +870,8 @@ function handleInviteeOtp(string $psid, string $text, array $session): void
         'REWARD_NOT_EXIST'=> "❌ لا توجد مكافأة متاحة للمدعو حالياً.",
         default           => "⚠️ تعذر تفعيل مكافأة المدعو مؤقتاً.",
     };
+
+    recordFinalResult($psid);
 
     sendMessage($psid,
         "📊 نتيجة تفعيل المكافآت:\n\n" .
@@ -1226,6 +1300,9 @@ function formatTimeRemaining(int $secondsLeft): string
 
 function activate2G(string $psid, array $user): void
 {
+    $rl = checkRateLimit($psid);
+    if ($rl !== null) { sendMessage($psid, rateLimitMessage($rl)); return; }
+
     $msisdn        = $user['msisdn'];
     $accessToken   = $user['access_token'];
     $refreshToken  = $user['refresh_token'];
@@ -1241,6 +1318,7 @@ function activate2G(string $psid, array $user): void
             $sevenDays = 7 * 24 * 3600;
             if ($elapsed < $sevenDays) {
                 $remaining = $sevenDays - $elapsed;
+                recordFinalResult($psid);
                 sendMessage($psid,
                     "عذرا 😬 لم تكمل أسبوع ⚠️\n\n" .
                     "⏳ الوقت المتبقي: " . formatTimeRemaining($remaining) . "\n\n" .
@@ -1303,6 +1381,7 @@ function activate2G(string $psid, array $user): void
 
         if ($httpCode === 402 || $innerStatus === 402) {
             clearPending($psid);
+            recordFinalResult($psid);
             sendMessage($psid,
                 "عذرا ⚠️ يلزمك الاشتراك في باقة 100da 💰 (عشرة الاف) او اكثر ثم بعدها يمكنك الاستفادة من 2G 🎁 المجانية كل اسبوع طيلة شهر كامل 📆\n\n" .
                 "🔴 ملاحظة 1️⃣: هذا التحديث من المتعامل جيزي ولا يمكن تجاوزه ⚠️\n" .
@@ -1314,6 +1393,7 @@ function activate2G(string $psid, array $user): void
 
         if ($httpCode === 403 || $innerStatus === 403) {
             clearPending($psid);
+            recordFinalResult($psid);
             sendMessage($psid,
                 "عذرا ⚠️ يلزمك الاشتراك في باقة 100da 💰 (عشرة الاف) او اكثر ثم بعدها يمكنك الاستفادة من 2G 🎁 المجانية كل اسبوع طيلة شهر كامل 📆\n\n" .
                 "🔴 ملاحظة 1️⃣: هذا التحديث من المتعامل جيزي ولا يمكن تجاوزه ⚠️\n" .
@@ -1328,6 +1408,7 @@ function activate2G(string $psid, array $user): void
             if (is_array($msgStr)) $msgStr = $msgStr['en'] ?? '';
             if (stripos($msgStr, 'successfully') !== false || $httpCode === 201 || $innerStatus === 200) {
                 clearPending($psid);
+                recordFinalResult($psid);
                 sendMessage($psid,
                     "⭐ تم تفعيل 2G بنجاح 🎁 للرقم {$displayMasked}\n" .
                     "\n\n" .
@@ -1366,6 +1447,9 @@ function activate70DZ(string $psid, array $user): void
 
 function activateOffer(string $psid, array $user, string $packageCode): void
 {
+    $rl = checkRateLimit($psid);
+    if ($rl !== null) { sendMessage($psid, rateLimitMessage($rl)); return; }
+
     $msisdn        = $user['msisdn'];
     $accessToken   = $user['access_token'];
     $refreshToken  = $user['refresh_token'];
@@ -1428,6 +1512,7 @@ function activateOffer(string $psid, array $user, string $packageCode): void
 
         if ($httpCode === 402 || $innerStatus === 402) {
             clearPending($psid);
+            recordFinalResult($psid);
             $balance    = $responseData['data']['mainBalance'] ?? null;
             $balanceMsg = ($balance !== null) ? "رصيدك الحالي: {$balance} دج 💳\n" : "";
             sendMessage($psid,
@@ -1440,8 +1525,9 @@ function activateOffer(string $psid, array $user, string $packageCode): void
 
         if ($httpCode === 403 || $innerStatus === 403) {
             clearPending($psid);
+            recordFinalResult($psid);
             sendMessage($psid,
-                "عذرا ⚠️ عليك الاشتراك في عرض ابتداءا من 100دج (عشر آلاف) ثم اعد المحاولة 💰\n\n" .
+                "عذرا ⚠️ حدث خطأ  أثناء محاولة تفعيل هذا العرض أعد المحاولة لاحقا او ان هذا العرض لايتوافق مع رقمك" .
                 "⚡ قناة التلقرام : https://t.me/tasjilbott"
             );
             clearSession($psid); sendMessage($psid, ""); return;
@@ -1451,6 +1537,7 @@ function activateOffer(string $psid, array $user, string $packageCode): void
             $msgStr = is_array($innerMsg) ? ($innerMsg['en'] ?? '') : (string)$innerMsg;
             if (stripos($msgStr, 'successfully') !== false || $httpCode === 201 || $innerStatus === 200) {
                 clearPending($psid);
+                recordFinalResult($psid);
                 $detailMsg = "";
                 if ($offerInfo) $detailMsg = "\n✅ تفاصيل العرض: " . $offerInfo['display'];
                 sendMessage($psid,
