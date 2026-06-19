@@ -523,87 +523,54 @@ function activateOffer(string $psid, array $user, string $packageCode): void
     $offerInfo     = OFFERS[$packageCode] ?? null;
     $offerLabel    = $offerInfo ? $offerInfo['name'] : $packageCode;
 
-    // ─── المرحلة 1: الطريقة القديمة ────────────────────────────────────────
-    $maxAttempts       = 10;
-    $maxTokenRefresh   = 3;
-    $tokenRefreshCount = 0;
-    $oldResult         = 'ERROR'; // سيحمل: SUCCESS / INSUFFICIENT_BALANCE / ERROR
-
     setPending($psid, "تفعيل {$offerLabel} 🔖");
     sendMessage($psid, "جاري تفعيل العرض {$offerLabel} 🔄...");
 
-    for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
-        $raw = activateProductCurl($msisdn, $accessToken, json_encode(['packageCode' => $packageCode]), 'actOffer');
-        if ($raw === null) { usleep(1000000); continue; }
+    // ─── المرحلة 1: محاولة واحدة بالطريقة القديمة ──────────────────────────
+    $raw = activateProductCurl($msisdn, $accessToken, json_encode(['packageCode' => $packageCode]), 'actOffer');
 
+    if ($raw !== null) {
         $httpCode     = $raw['http_code'];
         $responseData = $raw['json'];
         $bodyStr      = $raw['body'];
-        dbg("[OFFER_OLD:{$packageCode}] attempt={$attempt} http={$httpCode} body=" . substr($bodyStr, 0, 300));
+        dbg("[OFFER_OLD:{$packageCode}] http={$httpCode} body=" . substr($bodyStr, 0, 300));
 
-        if (!is_array($responseData)) { if ($httpCode === 429) usleep(2000000); else usleep(1000000); continue; }
+        if (is_array($responseData)) {
+            $innerStatus = (int)($responseData['status'] ?? 0);
+            $innerMsg    = $responseData['message'] ?? '';
 
-        // TOKEN_EXPIRED
-        $fault = $responseData['fault'] ?? null;
-        if ($fault !== null) {
-            $faultCode = (int)($fault['code'] ?? 0);
-            if ($faultCode === 900901) {
-                if ($tokenRefreshCount >= $maxTokenRefresh) { $oldResult = 'ERROR'; break; }
-                $tokenRefreshCount++;
-                $refreshed = refreshAccessToken($refreshToken, $msisdn, $psid);
-                if ($refreshed === false) { $oldResult = 'ERROR'; break; }
-                $accessToken  = $refreshed['access_token'];
-                $refreshToken = $refreshed['refresh_token'];
-                saveUser($psid, array_merge($user, ['access_token' => $accessToken, 'refresh_token' => $refreshToken]));
-                $attempt--;
-                continue;
-            }
-            usleep(1000000); continue;
-        }
-
-        $innerStatus = (int)($responseData['status'] ?? 0);
-        $innerMsg    = $responseData['message'] ?? '';
-
-        // رصيد غير كافٍ → نوقف ولا نجرب الطريقة الجديدة
-        if ($httpCode === 402 || $innerStatus === 402) {
-            clearPending($psid);
-            recordFinalResult($psid);
-            $balance    = $responseData['data']['mainBalance'] ?? null;
-            $balanceMsg = ($balance !== null) ? "رصيدك الحالي: {$balance} دج 💳\n" : "";
-            sendMessage($psid, "حدث خطأ ⚠️ رصيدك غير كافي 💰 لتفعيل هذا العرض 🔖 😔\n{$balanceMsg}\n⚡ قناة التلقرام : https://t.me/tasjilbott");
-            clearSession($psid); sendMessage($psid, ""); return;
-        }
-
-        // نجاح
-        if ($httpCode === 200 || $httpCode === 201 || $innerStatus === 200) {
-            $msgStr = is_array($innerMsg) ? ($innerMsg['en'] ?? '') : (string)$innerMsg;
-            if (stripos($msgStr, 'successfully') !== false || $httpCode === 201 || $innerStatus === 200) {
+            // رصيد غير كافٍ → نوقف ولا نجرب الطريقة الجديدة
+            if ($httpCode === 402 || $innerStatus === 402) {
                 clearPending($psid);
                 recordFinalResult($psid);
-                $detailMsg = $offerInfo ? "\n✅ تفاصيل العرض: " . $offerInfo['display'] : "";
-                sendMessage($psid,
-                    "⭐ تم تفعيل العرض بنجاح 🎁 للرقم {$displayMasked}\n✅ اسم العرض: {$offerLabel}{$detailMsg}\n\n⚡ قناة التلقرام : https://t.me/tasjilbott"
-                );
-                sendMessage($psid, "");
-                clearSession($psid);
-                sendMessage($psid, "لاتنسى متابعة حساب المطور </> : https://www.facebook.com/profile.php?id=100052854003446");
-                return;
+                $balance    = $responseData['data']['mainBalance'] ?? null;
+                $balanceMsg = ($balance !== null) ? "رصيدك الحالي: {$balance} دج 💳\n" : "";
+                sendMessage($psid, "حدث خطأ ⚠️ رصيدك غير كافي 💰 لتفعيل هذا العرض 🔖 😔\n{$balanceMsg}\n⚡ قناة التلقرام : https://t.me/tasjilbott");
+                clearSession($psid); sendMessage($psid, ""); return;
             }
-            usleep(1000000); continue;
-        }
 
-        if ($httpCode === 429) { usleep(2000000); continue; }
-        if ($httpCode === 500) { usleep(1000000); continue; }
-        // أي خطأ آخر (403 وغيره)
-        $oldResult = 'ERROR'; break;
-        usleep(1000000);
+            // نجاح
+            if ($httpCode === 200 || $httpCode === 201 || $innerStatus === 200) {
+                $msgStr = is_array($innerMsg) ? ($innerMsg['en'] ?? '') : (string)$innerMsg;
+                if (stripos($msgStr, 'successfully') !== false || $httpCode === 201 || $innerStatus === 200) {
+                    clearPending($psid);
+                    recordFinalResult($psid);
+                    $detailMsg = $offerInfo ? "\n✅ تفاصيل العرض: " . $offerInfo['display'] : "";
+                    sendMessage($psid,
+                        "⭐ تم تفعيل العرض بنجاح 🎁 للرقم {$displayMasked}\n✅ اسم العرض: {$offerLabel}{$detailMsg}\n\n⚡ قناة التلقرام : https://t.me/tasjilbott"
+                    );
+                    sendMessage($psid, "");
+                    clearSession($psid);
+                    sendMessage($psid, "لاتنسى متابعة حساب المطور </> : https://www.facebook.com/profile.php?id=100052854003446");
+                    return;
+                }
+            }
+        }
     }
 
-    // ─── المرحلة 2: الطريقة القديمة فشلت — أبلغ المستخدم وجرب الجديدة ───
+    // ─── المرحلة 2: الطريقة القديمة فشلت — جرب الجديدة ────────────────────
     clearPending($psid);
     sendMessage($psid, "⚠️ تعذر تفعيل العرض بالطريقة الأولى، جارٍ تجربة طريقة أخرى...");
-
-    // أرسل OTP الجديد وانتظر
     $phoneDisplay = '0' . substr($msisdn, 3);
     sendNewOTPAndWaitForOffer($psid, $msisdn, $phoneDisplay, $packageCode);
 }
