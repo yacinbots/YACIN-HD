@@ -28,13 +28,18 @@ define('CLIENT_SECRET_OLD', 'uf82p68Bgisp8Yg1Uz8Pf6_v1XYa');
 define('CLIENT_ID_NEW',     '6E6CwTkp8H1CyQxraPmcEJPQ7xka');
 define('CLIENT_SECRET_NEW', 'MVpXHW_ImuMsxKIwrJpoVVMHjRsa');
 
+// ════════ Algeria Match Gift ════════
+define('ALGERIA_MATCH_QR',         'https://www.djezzy.dz/scanwin-wd26?1');
+define('ALGERIA_MATCH_START_HOUR', 1);  // 1 صباحاً
+define('ALGERIA_MATCH_END_HOUR',   5);  // 5 صباحاً
+
 @mkdir(SESSIONS_DIR, 0777, true);
 @mkdir(USERS_DIR,    0777, true);
 @mkdir(PENDING_DIR,  0777, true);
 @mkdir(RATE_LIMIT_DIR, 0777, true);
 
 // ════════════════════════════════════════════════════════════════════════════
-// قائمة العروض — BTL500MBDAY أول العروض اليومية
+// قائمة العروض
 // ════════════════════════════════════════════════════════════════════════════
 define('OFFERS', [
     'BTL500MBDAY'            => ['name' => '📦 5GB - 90دج - 24h',          'display' => "الإنترنت: 5GB | السعر: 90 دج | المدة: 24 ساعة"],
@@ -57,7 +62,6 @@ define('OFFERS', [
     'ImtiyazSurpriseData2hfbPRE' => ['name' => '📘 FB غير محدود - 50دج - 4h', 'display' => "الإنترنت: Facebook غير محدود | السعر: 50 دج | المدة: 4 ساعات"],
 ]);
 
-// أرقام اختصار العروض — BTL500MBDAY=5، وبقية الأرقام تحركت +1
 define('OFFER_SHORTCUTS', [
     '5'  => 'BTL500MBDAY',
     '6'  => 'DOVINTSPEEDDAY100MoPRE',
@@ -255,6 +259,7 @@ function buildEventId(string $psid, array $event): string
     }
     return "ev_{$psid}_" . md5(json_encode($event));
 }
+
 // ════════════════════════════════════════════════════════════════════════════
 // Process Event
 // ════════════════════════════════════════════════════════════════════════════
@@ -293,6 +298,15 @@ function processEvent(string $psid, array $event): void
         elseif ($text === '2') handlePostback($psid, 'MENU_70DZ');
         elseif ($text === '3') handlePostback($psid, 'MENU_INVITE');
         elseif ($text === '4') handlePostback($psid, 'MENU_MORE_OFFERS');
+        elseif ($text === '30') {
+            $sess = getSession($psid); $user = getUser($psid);
+            if (!$user || empty($user['access_token'])) {
+                sendMessage($psid, "⚠️ يجب تسجيل الدخول أولاً، أرسل رقم هاتفك.");
+                return;
+            }
+            if (!empty($sess['msisdn'])) $user['msisdn'] = $sess['msisdn'];
+            activateAlgeriaMatchGift($psid, $user);
+        }
         elseif (isset(OFFER_SHORTCUTS[$text])) {
             handlePostback($psid, 'ACTIVATE_OFFER_' . OFFER_SHORTCUTS[$text]);
         } else {
@@ -354,11 +368,12 @@ function handleAwaitingOtp(string $psid, string $text, array $session): void
         setSession($psid, ['state' => 'menu', 'msisdn' => $msisdn]);
         sendMessage($psid, "✅ تم تسجيل الدخول بنجاح!");
         sendMenu($psid);
+        sendAlgeriaMatchGiftPromo($psid);
     }
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// [جديد] OTP Handler — تفعيل العرض بالطريقة الجديدة
+// OTP Handler — تفعيل العرض بالطريقة الجديدة
 // ════════════════════════════════════════════════════════════════════════════
 function handleOfferOtp(string $psid, string $text, array $session): void
 {
@@ -430,6 +445,7 @@ function handleNewPhone(string $psid, string $phone): void
                 setSession($psid, ['state' => 'menu', 'msisdn' => $msisdn]);
                 sendMessage($psid, "✅ تم التعرف على رقمك بنجاح!");
                 sendMenu($psid);
+                sendAlgeriaMatchGiftPromo($psid);
                 return;
             }
         }
@@ -450,7 +466,6 @@ function sendOTPAndWait(string $psid, string $msisdn, string $phone): void
     }
 }
 
-// [جديد] إرسال OTP لتفعيل عرض بالطريقة الجديدة
 function sendNewOTPAndWaitForOffer(string $psid, string $msisdn, string $phone, string $packageCode): void
 {
     if (sendDjezzyOTPNew($msisdn)) {
@@ -485,7 +500,18 @@ function handlePostback(string $psid, string $payload): void
         return;
     }
     switch ($payload) {
-        case 'GET_STARTED': sendWelcomeNew($psid); break;
+        case 'GET_STARTED':
+            sendWelcomeNew($psid);
+            break;
+        case 'ACTIVATE_ALGERIA_MATCH':
+            $sess = getSession($psid); $user = getUser($psid);
+            if (!$user || empty($user['access_token'])) {
+                sendMessage($psid, "⚠️ يجب تسجيل الدخول أولاً، أرسل رقم هاتفك.");
+                return;
+            }
+            if (!empty($sess['msisdn'])) $user['msisdn'] = $sess['msisdn'];
+            activateAlgeriaMatchGift($psid, $user);
+            break;
         case 'MENU_2G':
             $sess = getSession($psid); $user = getUser($psid);
             if (!$user || empty($user['access_token'])) { sendMessage($psid, "⚠️ يجب تسجيل الدخول أولاً، أرسل رقم هاتفك."); return; }
@@ -508,6 +534,191 @@ function handlePostback(string $psid, string $payload): void
         default: sendWelcome($psid);
     }
 }
+
+// ════════════════════════════════════════════════════════════════════════════
+// Algeria Match Gift — هدية مباراة الجزائر
+// ════════════════════════════════════════════════════════════════════════════
+function getMatchGiftTimeRemaining(): ?int
+{
+    // التوقيت الجزائري UTC+1
+    $nowAlgeria = time() + 3600;
+    $hour = (int)date('G', $nowAlgeria);
+
+    if ($hour >= ALGERIA_MATCH_START_HOUR && $hour < ALGERIA_MATCH_END_HOUR) {
+        // حساب وقت الانتهاء بتوقيت UTC
+        $todayDate     = date('Y-m-d', $nowAlgeria);
+        $endAlgeria    = strtotime($todayDate . ' ' . ALGERIA_MATCH_END_HOUR . ':00:00') - 3600;
+        return max(0, $endAlgeria - time());
+    }
+    return null;
+}
+
+function formatMatchTimeRemaining(int $seconds): string
+{
+    if ($seconds <= 0) return "0 دقيقة";
+    $h = (int)($seconds / 3600);
+    $m = (int)(($seconds % 3600) / 60);
+    if ($h > 0 && $m > 0) return "{$h} ساعة و{$m} دقيقة";
+    if ($h > 0) return "{$h} ساعة";
+    return "{$m} دقيقة";
+}
+
+function sendAlgeriaMatchGiftPromo(string $psid): void
+{
+    $remaining = getMatchGiftTimeRemaining();
+    if ($remaining === null) return; // خارج نطاق الوقت، لا ترسل
+
+    $timeLeft = formatMatchTimeRemaining($remaining);
+
+    fbApiCall(json_encode([
+        'recipient'      => ['id' => $psid],
+        'messaging_type' => 'RESPONSE',
+        'message'        => [
+            'text' =>
+                "🇩🇿🔥 هدية خاصة بمباراة الجزائر!\n\n" .
+                "━━━━━━━━━━━━━━━━━━━━━━\n\n" .
+                "🎁 احصل على 12Go مجاناً 🎉\n" .
+                "⏳ صالحة لمدة 5 ساعات فقط\n" .
+                "🕐 من 1:00 صباحاً حتى 5:00 صباحاً\n\n" .
+                "━━━━━━━━━━━━━━━━━━━━━━\n\n" .
+                "⚠️ سارع! متبقي فقط: {$timeLeft}\n\n" .
+                "📩 أرسل الرقم 30 للتفعيل الفوري",
+            'quick_replies' => [
+                [
+                    'content_type' => 'text',
+                    'title'        => '🇩🇿 تفعيل هدية المباراة',
+                    'payload'      => 'ACTIVATE_ALGERIA_MATCH',
+                ],
+            ],
+        ],
+    ], JSON_UNESCAPED_UNICODE));
+}
+
+function activateAlgeriaMatchGift(string $psid, array $user): void
+{
+    $rl = checkRateLimit($psid);
+    if ($rl !== null) { sendMessage($psid, rateLimitMessage($rl)); return; }
+
+    // التحقق من نافذة الوقت
+    $remaining = getMatchGiftTimeRemaining();
+    if ($remaining === null) {
+        sendMessage($psid,
+            "⏰ انتهى وقت الهدية!\n\n" .
+            "كانت الهدية متاحة من 1:00 صباحاً حتى 5:00 صباحاً فقط.\n\n" .
+            "⚡ قناة التلغرام: https://t.me/tasjilbott"
+        );
+        return;
+    }
+
+    $msisdn        = $user['msisdn'];
+    $accessToken   = $user['access_token'];
+    $displayMasked = substr($msisdn, 0, 4) . 'xxxx' . substr($msisdn, -2);
+    $timeLeft      = formatMatchTimeRemaining($remaining);
+
+    sendMessage($psid,
+        "🔄 جاري تفعيل هدية مباراة الجزائر 🇩🇿...\n\n" .
+        "⏳ الوقت المتبقي للهدية: {$timeLeft}"
+    );
+
+    $url     = "https://apim.djezzy.dz/mobile-api/api/v1/services/scan/activate-reward/{$msisdn}";
+    $payload = json_encode(['qrCode' => ALGERIA_MATCH_QR]);
+    $headers = [
+        'Content-Type: application/json',
+        'Accept: application/json',
+        'Accept-Encoding: gzip',
+        "Authorization: Bearer {$accessToken}",
+        'User-Agent: MobileApp/3.0.0',
+    ];
+
+    $proxies    = array_merge(loadProxies(), refreshProxies());
+    $maxRetries = 3;
+
+    for ($attempt = 1; $attempt <= $maxRetries; $attempt++) {
+        $httpCode     = 0;
+        $responseData = null;
+        $gotResponse  = false;
+
+        foreach ($proxies as $p) {
+            $pp = parseProxy($p);
+            $ch = curl_init($url);
+            curl_setopt_array($ch, [
+                CURLOPT_POST           => true,
+                CURLOPT_POSTFIELDS     => $payload,
+                CURLOPT_HTTPHEADER     => $headers,
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_ENCODING       => 'gzip',
+                CURLOPT_TIMEOUT        => 12,
+                CURLOPT_CONNECTTIMEOUT => 5,
+                CURLOPT_SSL_VERIFYPEER => false,
+                CURLOPT_PROXY          => $pp['host'],
+                CURLOPT_PROXYUSERPWD   => $pp['userpass'],
+                CURLOPT_PROXYTYPE      => CURLPROXY_HTTP,
+                CURLOPT_FOLLOWLOCATION => true,
+            ]);
+            $body     = curl_exec($ch);
+            $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $errno    = curl_errno($ch);
+            curl_close($ch);
+
+            $bodyStr = (string)$body;
+            dbg("[MATCH_GIFT] attempt={$attempt} http={$httpCode} body=" . substr($bodyStr, 0, 300));
+            file_put_contents('/tmp/match_gift.log',
+                date('Y-m-d H:i:s') . " attempt={$attempt} http={$httpCode} body=" . substr($bodyStr, 0, 400) . "\n",
+                FILE_APPEND
+            );
+
+            if ($errno || !$body || stripos($bodyStr, '<html') !== false) continue;
+
+            $responseData = @json_decode($bodyStr, true);
+            $gotResponse  = true;
+            break;
+        }
+
+        if (!$gotResponse) {
+            usleep(1000000);
+            continue;
+        }
+
+        // ─── نجاح ───────────────────────────────────────────────────────────
+        if ($httpCode === 200 || $httpCode === 201) {
+            recordFinalResult($psid);
+            sendMessage($psid,
+                "🎉 تم تفعيل الهدية بنجاح!\n\n" .
+                "استمتع بمباراة الجزائر 🇩🇿⚽\n\n" .
+                "✅ الرقم: {$displayMasked}\n" .
+                "🎁 الهدية: 12Go صالحة لمدة 5 ساعات\n\n" .
+                "⚡ قناة التلغرام: https://t.me/tasjilbott"
+            );
+            sendMessage($psid, "لاتنسى متابعة حساب المطور </> : https://www.facebook.com/profile.php?id=100052854003446");
+            clearSession($psid);
+            return;
+        }
+
+        // ─── مستفيد مسبقاً أو غير مؤهل ─────────────────────────────────────
+        if ($httpCode === 400) {
+            recordFinalResult($psid);
+            sendMessage($psid,
+                "⚠️ لقد استفدت من الهدية مسبقاً أو أن رقمك غير مؤهل لهذه الهدية.\n\n" .
+                "⚡ قناة التلغرام: https://t.me/tasjilbott"
+            );
+            clearSession($psid);
+            return;
+        }
+
+        // ─── أخطاء أخرى — إعادة المحاولة ────────────────────────────────────
+        dbg("[MATCH_GIFT] attempt={$attempt} unexpected http={$httpCode}, retrying...");
+        usleep(1000000);
+    }
+
+    // ─── فشل بعد 3 محاولات ──────────────────────────────────────────────────
+    sendMessage($psid,
+        "❌ حدث خطأ أثناء تفعيل الهدية بعد عدة محاولات.\n\n" .
+        "يرجى المحاولة مجدداً.\n\n" .
+        "⚡ قناة التلغرام: https://t.me/tasjilbott"
+    );
+    clearSession($psid);
+}
+
 // ════════════════════════════════════════════════════════════════════════════
 // activateOffer — يجرب الطريقة القديمة أولاً، وعند فشلها يجرب الجديدة
 // ════════════════════════════════════════════════════════════════════════════
@@ -539,7 +750,6 @@ function activateOffer(string $psid, array $user, string $packageCode): void
             $innerStatus = (int)($responseData['status'] ?? 0);
             $innerMsg    = $responseData['message'] ?? '';
 
-            // رصيد غير كافٍ → نوقف ولا نجرب الطريقة الجديدة
             if ($httpCode === 402 || $innerStatus === 402) {
                 clearPending($psid);
                 recordFinalResult($psid);
@@ -549,7 +759,6 @@ function activateOffer(string $psid, array $user, string $packageCode): void
                 clearSession($psid); sendMessage($psid, ""); return;
             }
 
-            // نجاح
             if ($httpCode === 200 || $httpCode === 201 || $innerStatus === 200) {
                 $msgStr = is_array($innerMsg) ? ($innerMsg['en'] ?? '') : (string)$innerMsg;
                 if (stripos($msgStr, 'successfully') !== false || $httpCode === 201 || $innerStatus === 200) {
@@ -576,7 +785,7 @@ function activateOffer(string $psid, array $user, string $packageCode): void
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// [جديد] activateOfferNew — التفعيل بالطريقة الجديدة بعد OTP
+// activateOfferNew — التفعيل بالطريقة الجديدة بعد OTP
 // ════════════════════════════════════════════════════════════════════════════
 function activateOfferNew(string $psid, array $user, string $packageCode): void
 {
@@ -622,7 +831,6 @@ function activateOfferNew(string $psid, array $user, string $packageCode): void
 
         $innerStatus = (int)($responseData['status'] ?? 0);
 
-        // رصيد غير كافٍ
         if ($httpCode === 402 || $innerStatus === 402) {
             clearPending($psid);
             recordFinalResult($psid);
@@ -632,7 +840,6 @@ function activateOfferNew(string $psid, array $user, string $packageCode): void
             clearSession($psid); sendMessage($psid, ""); return;
         }
 
-        // نجاح
         if ($httpCode === 200 || $httpCode === 201) {
             clearPending($psid);
             recordFinalResult($psid);
@@ -651,7 +858,6 @@ function activateOfferNew(string $psid, array $user, string $packageCode): void
         usleep(1000000);
     }
 
-    // فشلت الطريقة الجديدة أيضاً
     clearPending($psid);
     recordFinalResult($psid);
     sendMessage($psid, "عذرا ⚠️ تعذر تفعيل العرض، يبدو أن شريحتك لا تدعم هذا العرض أو حدث خطأ مؤقت\n\n⚡ قناة التلقرام : https://t.me/tasjilbott");
@@ -668,7 +874,7 @@ function activate70DZ(string $psid, array $user): void
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// activate2G — لا تتغير (تبقى بالطريقة القديمة فقط)
+// activate2G
 // ════════════════════════════════════════════════════════════════════════════
 function activate2G(string $psid, array $user): void
 {
@@ -757,6 +963,7 @@ function activate2G(string $psid, array $user): void
     sendMessage($psid, "هناك اشكال في سيرفر جيزي ⚠️ لم نستطع التفعيل لرقمك \n\n⚡ قناة التلقرام : https://t.me/tasjilbott");
     clearSession($psid); sendMessage($psid, "");
 }
+
 // ════════════════════════════════════════════════════════════════════════════
 // MGM — بداية عملية الدعوة
 // ════════════════════════════════════════════════════════════════════════════
@@ -834,7 +1041,7 @@ function handleInviteStart(string $psid, array $user): void
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// MGM — استقبال رقم المدعو (مع منع دعوة نفس الرقم)
+// MGM — استقبال رقم المدعو
 // ════════════════════════════════════════════════════════════════════════════
 function handleInvitePhoneInput(string $psid, string $text, array $session): void
 {
@@ -853,7 +1060,6 @@ function handleInvitePhoneInput(string $psid, string $text, array $session): voi
     $receiverMsisdn = '213' . substr($digits, 1);
     $senderMsisdn   = $session['msisdn'];
 
-    // ════ منع دعوة نفس رقم الداعي ════
     if ($receiverMsisdn === $senderMsisdn) {
         sendMessage($psid, "❌ لا يمكنك دعوة رقمك الخاص!\n\nأرسل رقم شخص آخر.\n\n❌ لإلغاء العملية أرسل: 1");
         return;
@@ -1055,7 +1261,7 @@ function activateMgmReward(string $msisdn, string $accessToken, string $packageC
             }
             if (!is_array($json)) { usleep(500000); continue; }
             if ($httpCode === 404) {
-                $msg = $json['message'] ?? ''; $msgEn = is_array($msg) ? ($msg['en'] ?? '') : (string)$msg; $msgAr = is_array($msg) ? ($msg['ar'] ?? '') : (string)$msg;
+                $msg = $json['message'] ?? ''; $msgEn = is_array($msg) ? ($msg['en'] ?? '') : (string)$msg;
                 if (stripos($msgEn,'Eligibility not found')!==false||stripos($msgEn,'eligibility')!==false) return 'ALREADY_CLAIMED';
                 return 'REWARD_NOT_EXIST';
             }
@@ -1083,6 +1289,7 @@ function tryActivateMgmBonus(string $psid, string $msisdn, string $accessToken, 
     }
     return 'ERROR';
 }
+
 // ════════════════════════════════════════════════════════════════════════════
 // fetchSubscriptionHistory
 // ════════════════════════════════════════════════════════════════════════════
@@ -1176,7 +1383,7 @@ function doActivateProductCurl(string $url, string $payload, string $token, stri
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// [جديد] cURL لتفعيل العرض بالطريقة الجديدة
+// cURL لتفعيل العرض بالطريقة الجديدة
 // ════════════════════════════════════════════════════════════════════════════
 function activateProductCurlNew(string $msisdn, string $accessToken, string $packageCode, string $logTag): ?array
 {
@@ -1200,7 +1407,7 @@ function activateProductCurlNew(string $msisdn, string $accessToken, string $pac
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// Token Refresh — القديمة (للـ 2G والدعوة)
+// Token Refresh — credentials قديمة
 // ════════════════════════════════════════════════════════════════════════════
 function refreshAccessToken(string $refreshToken, string $msisdn, string $psid): mixed
 {
@@ -1235,7 +1442,7 @@ function refreshTokenRequest(string $refreshToken, string $proxyHost, string $pr
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// [جديد] Token Refresh — credentials جديدة (للعروض)
+// Token Refresh — credentials جديدة
 // ════════════════════════════════════════════════════════════════════════════
 function refreshAccessTokenNew(string $refreshToken, string $msisdn, string $psid, string $packageCode): mixed
 {
@@ -1302,7 +1509,7 @@ function djezzyTokenReq(string $msisdn, string $otp, string $ph, string $pa): mi
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// [جديد] Djezzy API — OTP وتحقق (credentials جديدة)
+// Djezzy API — OTP وتحقق (credentials جديدة)
 // ════════════════════════════════════════════════════════════════════════════
 function sendDjezzyOTPNew(string $msisdn): bool
 {
@@ -1391,7 +1598,7 @@ function loadProxies(): array
     "https://change4.owlproxy.com:7778:17byreTk1q60_custom_zone_DZ_st__city_sid_73324452_time_5:4811293",
     "https://change4.owlproxy.com:7778:IoelzxN0O960_custom_zone_DZ_st__city_sid_78092951_time_5:4811306",
     "https://change4.owlproxy.com:7778:jwOstDUYp600_custom_zone_DZ_st__city_sid_30410581_time_5:4811325"
-];
+    ];
 }
 function refreshProxies(): array
 {
