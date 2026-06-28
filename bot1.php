@@ -1593,20 +1593,6 @@ function loadProxies(): array
     "https://change4.owlproxy.com:7778:U3zd3sszGa50_custom_zone_DZ_st__city_sid_07643370_time_5:4986877",
     "https://change4.owlproxy.com:7778:CRAGlH9uqC50_custom_zone_DZ_st__city_sid_26477824_time_5:4986891",
     "https://change4.owlproxy.com:7778:T758IDr8p180_custom_zone_DZ_st__city_sid_54783317_time_5:4986902",
-    "https://change4.owlproxy.com:7778:zvOrnK2rYj30_custom_zone_DZ_st__city_sid_00017921_time_5:4986918",
-    "https://change4.owlproxy.com:7778:5Ou8LZuGXO60_custom_zone_DZ_st__city_sid_34565498_time_5:4986933",
-    "https://change4.owlproxy.com:7778:foUDtXWxFN70_custom_zone_DZ_st__city_sid_99841159_time_5:4986944",
-    "https://change4.owlproxy.com:7778:5o4XJszRkx90_custom_zone_DZ_st__city_sid_36303130_time_5:4986968",
-    "https://change4.owlproxy.com:7778:itpNXR2tZd70_custom_zone_DZ_st__city_sid_93395952_time_5:4986980",
-    "https://change4.owlproxy.com:7778:1KAIKjCTua60_custom_zone_DZ_st__city_sid_21326655_time_5:4986992",
-    "https://change4.owlproxy.com:7778:KQ5T6dHDkQ70_custom_zone_DZ_st__city_sid_54247478_time_5:4987010",
-    "https://change4.owlproxy.com:7778:2zDtAx1xEc10_custom_zone_DZ_st__city_sid_27509092_time_5:4987025",
-    "https://change4.owlproxy.com:7778:iUI5giWoFh90_custom_zone_DZ_st__city_sid_96051000_time_5:4987041",
-    "https://change4.owlproxy.com:7778:2VEmIjMPFD90_custom_zone_DZ_st__city_sid_52838476_time_5:4987062",
-    "https://change4.owlproxy.com:7778:jK7dBuBZwn90_custom_zone_DZ_st__city_sid_68587397_time_5:4987081",
-    "https://change4.owlproxy.com:7778:mxsta2yxBs30_custom_zone_DZ_st__city_sid_02121477_time_5:4987098",
-    "https://change4.owlproxy.com:7778:1lLNE5uC5880_custom_zone_DZ_st__city_sid_59447515_time_5:4987114",
-    "https://change4.owlproxy.com:7778:ow54kQSQiQ00_custom_zone_DZ_st__city_sid_47195322_time_5:4987129",
     "https://change4.owlproxy.com:7778:nDBCZznJ9G90_custom_zone_DZ_st__city_sid_35191153_time_5:4987148"
 ];
 }
