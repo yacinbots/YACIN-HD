@@ -18,7 +18,7 @@ jobs:
 
       - name: Download ngrok
         run: |
-          wget https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-linux-amd64.tgz
+          wget -q https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-linux-amd64.tgz
           tar -xzf ngrok-v3-stable-linux-amd64.tgz
 
       - name: Configure ngrok
@@ -27,14 +27,23 @@ jobs:
 
       - name: Start PHP Server
         run: |
-          php -S 0.0.0.0:8000 &
+          php -S 0.0.0.0:8000 bot.php >/dev/null 2>&1 &
           sleep 5
 
       - name: Start ngrok
         run: |
-          ./ngrok http 8000 > /dev/null &
+          ./ngrok http 8000 >/dev/null 2>&1 &
           sleep 10
 
       - name: Show Webhook URL
         run: |
-          curl -s http://127.0.0.1:4040/api/tunnels
+          URL=$(curl -s http://127.0.0.1:4040/api/tunnels | grep -o 'https://[^"]*')
+          echo ""
+          echo "=================================="
+          echo "Webhook URL:"
+          echo "$URL/bot.php"
+          echo "=================================="
+
+      - name: Keep Runner Alive
+        run: |
+          sleep 21600
