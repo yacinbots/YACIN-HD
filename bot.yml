@@ -1,0 +1,40 @@
+name: PHP Bot
+
+on:
+  workflow_dispatch:
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Project
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.2"
+
+      - name: Download ngrok
+        run: |
+          wget https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-linux-amd64.tgz
+          tar -xzf ngrok-v3-stable-linux-amd64.tgz
+
+      - name: Configure ngrok
+        run: |
+          ./ngrok config add-authtoken 2gzCXiehyX6Dvdjyam6CeA3P7wN_4ZRSp9hHWtNdUrEMfW7A5
+
+      - name: Start PHP Server
+        run: |
+          php -S 0.0.0.0:8000 &
+          sleep 5
+
+      - name: Start ngrok
+        run: |
+          ./ngrok http 8000 > /dev/null &
+          sleep 10
+
+      - name: Show Webhook URL
+        run: |
+          curl -s http://127.0.0.1:4040/api/tunnels
