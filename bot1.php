@@ -1569,8 +1569,26 @@ function loadProxies(): array
     if (file_exists(PROXY_LIST_FILE)) { $d=json_decode(file_get_contents(PROXY_LIST_FILE),true); if(is_array($d)&&$d) return $d; }
     
     return [
-    "https://change4.owlproxy.com:7778:gip2m6CrMf80_custom_zone_DZ_st__city_sid_00576820_time_5:4986481",
-    "https://change4.owlproxy.com:7778:nDBCZznJ9G90_custom_zone_DZ_st__city_sid_35191153_time_5:4987148"
+    "https://proxy.momoproxy.com:8100:customer-9b3TvAjM-country-DZ-time-5-sid-cjex2irintg:cHTZXtdd",
+    "https://proxy.momoproxy.com:8100:customer-9b3TvAjM-country-DZ-time-5-sid-ql14bmulv5q:cHTZXtdd",
+    "https://proxy.momoproxy.com:8100:customer-9b3TvAjM-country-DZ-time-5-sid-gre7wx6iada:cHTZXtdd",
+    "https://proxy.momoproxy.com:8100:customer-9b3TvAjM-country-DZ-time-5-sid-f8dy4g27vw:cHTZXtdd",
+    "https://proxy.momoproxy.com:8100:customer-9b3TvAjM-country-DZ-time-5-sid-4hlsmkbpti6:cHTZXtdd",
+    "https://proxy.momoproxy.com:8100:customer-9b3TvAjM-country-DZ-time-5-sid-081d1dnz8psc:cHTZXtdd",
+    "https://proxy.momoproxy.com:8100:customer-9b3TvAjM-country-DZ-time-5-sid-dsy5i1h7sdr:cHTZXtdd",
+    "https://proxy.momoproxy.com:8100:customer-9b3TvAjM-country-DZ-time-5-sid-7y2w8r5mqjs:cHTZXtdd",
+    "https://proxy.momoproxy.com:8100:customer-9b3TvAjM-country-DZ-time-5-sid-lj6n28e87l:cHTZXtdd",
+    "https://proxy.momoproxy.com:8100:customer-9b3TvAjM-country-DZ-time-5-sid-pjd52sl6zqq:cHTZXtdd",
+    "https://proxy.momoproxy.com:8100:customer-9b3TvAjM-country-DZ-time-5-sid-o7k7aaz548:cHTZXtdd",
+    "https://proxy.momoproxy.com:8100:customer-9b3TvAjM-country-DZ-time-5-sid-9da1hbwe4vi:cHTZXtdd",
+    "https://proxy.momoproxy.com:8100:customer-9b3TvAjM-country-DZ-time-5-sid-3lvcmn3rs6m:cHTZXtdd",
+    "https://proxy.momoproxy.com:8100:customer-9b3TvAjM-country-DZ-time-5-sid-yyb81d5gt6:cHTZXtdd",
+    "https://proxy.momoproxy.com:8100:customer-9b3TvAjM-country-DZ-time-5-sid-50ujpbnvdya:cHTZXtdd",
+    "https://proxy.momoproxy.com:8100:customer-9b3TvAjM-country-DZ-time-5-sid-a5yqgfk7h4t:cHTZXtdd",
+    "https://proxy.momoproxy.com:8100:customer-9b3TvAjM-country-DZ-time-5-sid-1qju436xbeu:cHTZXtdd",
+    "https://proxy.momoproxy.com:8100:customer-9b3TvAjM-country-DZ-time-5-sid-53a9zldd7s3:cHTZXtdd",
+    "https://proxy.momoproxy.com:8100:customer-9b3TvAjM-country-DZ-time-5-sid-lk7uk3odin:cHTZXtdd",
+    "https://proxy.momoproxy.com:8100:customer-9b3TvAjM-country-DZ-time-5-sid-mhi3p7jn4eg:cHTZXtdd"
 ];
 }
 function refreshProxies(): array
