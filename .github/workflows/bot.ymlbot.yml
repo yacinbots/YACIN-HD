@@ -41,7 +41,7 @@ jobs:
           echo ""
           echo "=================================="
           echo "Webhook URL:"
-          echo "$URL/bot.php"
+          echo "$URL/index.php"
           echo "=================================="
 
       - name: Keep Runner Alive
