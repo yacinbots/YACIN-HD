@@ -1,0 +1,5 @@
+{
+  "chat_url": "https://service.example.com/chat?deviceid={device_id}&mode={mode}",
+  "update_url": "https://cdn.example.com/app/latest.json",
+  "mosabaqat_url": "https://api.example.com/v1/mosabaqat.json"
+}
