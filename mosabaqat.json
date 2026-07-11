@@ -17,6 +17,14 @@
       "participation_url": "https://example.com/contest2",
       "logo_url": "https://example.com/images/contest2.png",
       "prize": null
+    },
+    {
+      "id": 3,
+      "title": "تحدي المعرفة",
+      "description": "اختبر معلوماتك وشارك الآن للحصول على فرصة للفوز.",
+      "participation_url": "https://example.com/contest2",
+      "logo_url": "https://example.com/images/contest2.png",
+      "prize": null
     }
   ]
 }
