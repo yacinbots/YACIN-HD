@@ -1,0 +1,20 @@
+{
+  "status": true,
+  "update": {
+    "version": "2.0.0",
+    "version_code": 20,
+    "force_update": false,
+    "title": "تحديث جديد متوفر",
+    "description": "يتضمن هذا التحديث تحسينات في الأداء وإصلاحات للأخطاء وإضافة ميزات جديدة.",
+    "icon_url": "https://example.com/images/update.png",
+    "features": [
+      "إضافة قسم المسابقات.",
+      "تحسين سرعة التطبيق.",
+      "إصلاح مشكلة تسجيل الدخول.",
+      "تحسين واجهة المستخدم."
+    ],
+    "update_url": "https://example.com/download/app.apk",
+    "info_url": "https://example.com/update-details",
+    "release_date": "2026-07-11"
+  }
+}
