@@ -1,5 +1,6 @@
 {
   "chat_url": "https://service.example.com/chat?deviceid={device_id}&mode={mode}",
   "mosabaqat_url": "https://raw.githubusercontent.com/yacinbots/YACIN-HD/refs/heads/main/mosabaqat.json"٫
+  "update_url": "https://raw.githubusercontent.com/yacinbots/YACIN-HD/refs/heads/main/update.json",
   "offres_url": "https://raw.githubusercontent.com/yacinbots/YACIN-HD/refs/heads/main/offers.json"
 }
