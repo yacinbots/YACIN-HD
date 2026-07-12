@@ -1,57 +1,12 @@
 {
   "offers": [
     {
-      "name": "5GB",
-      "internet": "5GB",
-      "duration": "24 ساعة",
-      "price": 90,
-      "type": "يومي",
-      "packageCode": "ACTIVATE_OFFER_5GB_DAILY",
-      "mostRequested": true
-    },
-    {
-      "name": "10GB",
+      "name": "IMTIYAZ 190",
       "internet": "10GB",
-      "duration": "24 ساعة",
-      "price": 150,
+      "duration": "72 ساعة",
+      "price": 190,
       "type": "يومي",
-      "packageCode": "ACTIVATE_OFFER_10GB_DAILY",
-      "mostRequested": false
-    },
-    {
-      "name": "20GB",
-      "internet": "20GB",
-      "duration": "7 أيام",
-      "price": 500,
-      "type": "أسبوعي",
-      "packageCode": "ACTIVATE_OFFER_20GB_WEEKLY",
-      "mostRequested": true
-    },
-    {
-      "name": "50GB",
-      "internet": "50GB",
-      "duration": "30 يوم",
-      "price": 1000,
-      "type": "شهري",
-      "packageCode": "ACTIVATE_OFFER_50GB_MONTHLY",
-      "mostRequested": false
-    },
-    {
-      "name": "100GB",
-      "internet": "100GB",
-      "duration": "30 يوم",
-      "price": 1500,
-      "type": "شهري",
-      "packageCode": "ACTIVATE_OFFER_100GB_MONTHLY",
-      "mostRequested": true
-    },
-    {
-      "name": "2GB",
-      "internet": "2GB",
-      "duration": "6 ساعات",
-      "price": 50,
-      "type": "ساعات",
-      "packageCode": "ACTIVATE_OFFER_2GB_6H",
+      "packageCode": "BTL4GBDAY",
       "mostRequested": false
     }
   ]
