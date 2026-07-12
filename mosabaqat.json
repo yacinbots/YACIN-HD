@@ -1,1 +1,15 @@
-{}
+{
+  
+  "status": true,
+  "count": 1,
+  "contests": [
+    {
+      "id": 1,
+      "title": "مسابقة ربح فليكسي على صفحتنا فيسبوك",
+      "description": "صاحب التعليق الذي يحصل على اكبر عدد من اللايكات يربح معنا عدد الفائزين سيكون 5 أشخاص",
+      "participation_url": "https://example.com/contest1",
+      "logo_url": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQfGv-4a2Odo3N6EaZsIR_4xxqjDktdTxEpMk73fzF7-g&s=10",
+      "prize": "هاتف ذكي"
+    }
+  ]
+}
