@@ -1,20 +1,17 @@
 {
   "status": true,
   "update": {
-    "version": "2.0.0",
+    "version": "2.0.1",
     "version_code": 20,
     "force_update": false,
     "title": "تحديث جديد متوفر",
-    "description": "يتضمن هذا التحديث تحسينات في الأداء وإصلاحات للأخطاء وإضافة ميزات جديدة.",
-    "icon_url": "https://example.com/images/update.png",
+    "description": "يتضمن هذا التحديث حل لمشكلة تفعيل الهدية الأسبوعية 2Gb للأرقام المؤهلة",
+    "icon_url": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR346VK8c26UcyQ0PpOpfxfU50OFm1nuvw9FponufiLLQ&s=10",
     "features": [
-      "إضافة قسم المسابقات.",
-      "تحسين سرعة التطبيق.",
-      "إصلاح مشكلة تسجيل الدخول.",
-      "تحسين واجهة المستخدم."
+      "✅ حل مشكلة عدم تفعيل 2Gb للأرقام المؤهلة 👌"
     ],
-    "update_url": "https://example.com/download/app.apk",
-    "info_url": "https://example.com/update-details",
-    "release_date": "2026-07-11"
+    "update_url": "https://github.com/yacinbots/YACIN-HD/releases/download/Snap/Tasjil.APP_2.0.1.apk",
+    "info_url": "https://yacinbots.github.io/Tasjil-APP-Download/",
+    "release_date": "2026-07-18"
   }
 }
