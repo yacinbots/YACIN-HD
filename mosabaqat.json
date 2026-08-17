@@ -1,1 +1,14 @@
-{}
+{
+  "status": true,
+  "count": 1,
+  "contests": [
+    {
+      "id": 1,
+      "title": "إقبل دعوتي وأحصل على هدايا مجاناً!",
+      "description": "انضم عبر رابط الدعوة واستفد من فرصة الحصول على هدية مجانية. شروط المشاركة: يجب إنشاء حساب جديد.",
+      "participation_url": "https://temu.com/u/CfOEo9RRUaCPN",
+      "logo_url": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQKpn51LWguKgfICKyq_BKhFWb2uot5L1tJbvMGY-LYQg&s=10",
+      "prize": "مفاجأة"
+    }
+  ]
+}
