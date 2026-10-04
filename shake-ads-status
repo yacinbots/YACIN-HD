@@ -1,0 +1,24 @@
+{
+  "users": [
+    {
+      "id": "aiei29so",
+      "created_at": "04/10/2026 01:30:13",
+      "expired_at": "04/10/2026 20:00:13",
+      "duration": {
+        "type": "hours",
+        "value": 18,
+        "text": "18 ساعة"
+      }
+    },
+    {
+      "id": "USER_ID_2",
+      "created_at": "04/10/2026 02:00:00",
+      "expired_at": "05/10/2026 02:00:00",
+      "duration": {
+        "type": "days",
+        "value": 1,
+        "text": "يوم واحد"
+      }
+    }
+  ]
+}
