@@ -1,12 +1,12 @@
 {
   "status": true,
   "update": {
-    "version": "2.0.1",
+    "version": "2.1.0",
     "version_code": 21,
-    "force_update": false,
+    "force_update": true,
     "title": "تحديث جديد متوفر",
     "description": "يتضمن هذا التحديث دعم شبكة أوريدو، الهدية اليومية، تفعيل مختلف العروض، تفعيل سناب شات يوز، حماية التطبيق ببصمة الإصبع أو الوجه، وإصلاح مشكلة إرسال رمز التحقق في جازي",
-    "icon_url": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR346VK8c26UcyQ0PpOpfxfU50OFm1nuvw9FponufiLLQ&s=10",
+    "icon_url": "https://pxdrop.online/raw/db1bkai81qec73f6okp0",
     "features": [
       "📡 دعم شبكة أوريدو — تفعيل العروض وإدارة الرصيد",
       "🎁 الهدية اليومية — بيانات مجانية كل يوم",
