@@ -5,18 +5,13 @@
     "version_code": 21,
     "force_update": true,
     "title": "تحديث جديد متوفر",
-    "description": "يتضمن هذا التحديث دعم شبكة أوريدو، الهدية اليومية، تفعيل مختلف العروض، تفعيل سناب شات يوز، حماية التطبيق ببصمة الإصبع أو الوجه، وإصلاح مشكلة إرسال رمز التحقق في جازي",
+    "description": "تحسين حماية داخل التطبيق",
     "icon_url": "https://pxdrop.online/raw/db1bkai81qec73f6okp0",
     "features": [
-      "📡 دعم شبكة أوريدو — تفعيل العروض وإدارة الرصيد",
-      "🎁 الهدية اليومية — بيانات مجانية كل يوم",
-      "⚡ تفعيل مختلف العروض لجازي وأوريدو",
-      "📸 تفعيل سناب شات يوز (Snapchat YOOZ)",
-      "🔐 حماية التطبيق ببصمة الإصبع أو التعرف على الوجه",
-      "🛠️ إصلاح مشكلة إرسال رمز التحقق في جازي"
+      "تحسين حماية داخل التطبيق"
     ],
     "update_url": "https://github.com/yacinbots/YACIN-HD/releases/download/Snap/Tasjil.APP_2.1.0.apk",
     "info_url": "https://yacinbots.github.io/Tasjil-APP-Download/",
-    "release_date": "2026-10-04"
+    "release_date": "2026-10-06"
   }
 }
