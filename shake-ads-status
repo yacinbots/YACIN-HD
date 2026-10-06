@@ -11,13 +11,13 @@
       }
     },
     {
-      "id": "USER_ID_2",
-      "created_at": "04/10/2026 02:00:00",
-      "expired_at": "05/10/2026 02:00:00",
+      "id": "7bbdff62",
+      "created_at": "06/10/2026 16:09:00",
+      "expired_at": "06/11/2026 17:00:00",
       "duration": {
-        "type": "days",
+        "type": "monthly",
         "value": 1,
-        "text": "يوم واحد"
+        "text": "شهر واحد"
       }
     }
   ]
