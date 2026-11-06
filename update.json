@@ -1,17 +1,17 @@
 {
   "status": true,
   "update": {
-    "version": "2.1.1",
+    "version": "2.1.2",
     "version_code": 21,
     "force_update": true,
     "title": "تحديث جديد متوفر",
-    "description": "تحسين حماية داخل التطبيق",
+    "description": "🔥 اضافة ميزة 6 جيقا مجانية كل جمعة ✅",
     "icon_url": "https://pxdrop.online/raw/db1bkai81qec73f6okp0",
     "features": [
-      "تحسين حماية داخل التطبيق"
+      "🔥 اضافة ميزة 6 جيقا مجانية كل جمعة ✅"
     ],
-    "update_url": "https://github.com/yacinbots/YACIN-HD/releases/download/Snap/Tasjil.APP_2.1.0.apk",
+    "update_url": "https://github.com/yacinbots/YACIN-HD/releases/download/Snap/Tasjil.APP_2.1.2.apk",
     "info_url": "https://yacinbots.github.io/Tasjil-APP-Download/",
-    "release_date": "2026-10-06"
+    "release_date": "2026-11-06"
   }
 }
