@@ -7,7 +7,36 @@
       "price": 190,
       "type": "يومي",
       "packageCode": "BTL4GBDAY",
-      "mostRequested": false
+      "mostRequested": false,
+      "operator": "DJEZZY",
+      "important": false,
+      "image": null
+    },
+    {
+      "name": "Ooredoo Offer 1",
+      "internet": "15GB",
+      "calls": "15 دقيقة مع اوريدو",
+      "sms": "غير محدود",
+      "duration": "30 يوم",
+      "price": 1000,
+      "type": "شهري",
+      "packageCode": "OOREDOO1000",
+      "mostRequested": true,
+      "operator": "OOREDOO",
+      "important": true,
+      "image": "https://example.com/ooredoo1.jpg"
+    },
+    {
+      "name": "Ooredoo Offer 2",
+      "internet": "5GB",
+      "duration": "7 أيام",
+      "price": 500,
+      "type": "أسبوعي",
+      "packageCode": "OOREDOO500",
+      "mostRequested": false,
+      "operator": "OOREDOO",
+      "important": false,
+      "image": null
     }
   ]
 }
