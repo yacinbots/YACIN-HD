@@ -2,16 +2,20 @@
   "status": true,
   "update": {
     "version": "2.1.2",
-    "version_code": 21,
+    "version_code": 22,
     "force_update": true,
     "title": "تحديث جديد متوفر",
-    "description": "🔥 اضافة ميزة 6 جيقا مجانية كل جمعة ✅",
-    "icon_url": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRdQoi_Se6RX6TgCAXladOXcSZnGOv8qKu_udoyx1ybpQ&s",
+    "description": "🐍 نقاط Power of Snake + إسلاميات أوريدو + إزالة الإعلانات ✅",
+    "icon_url": "https://raw.githubusercontent.com/yacinbots/YACIN-HD/refs/heads/main/file_0000000063d481f48d2ff18309b68d9a.png",
     "features": [
-      "🔥 اضافة ميزة 6 جيقا مجانية كل جمعة ✅"
+      "🛠️ إصلاح مشاكل أوريدو",
+      "🐍 إضافة نقاط Power of Snake في أوريدو",
+      "🕌 إضافة قسم إسلاميات — تلاوات، نصائح، أذكار، أحاديث في أوريدو",
+      "🛠️ إصلاح مشكلة إعادة إرسال الرمز في عروض جيزي",
+      "🚫 إزالة الإعلانات من التطبيق"
     ],
-    "update_url": "https://github.com/yacinbots/YACIN-HD/releases/download/Snap/Tasjil.APP_2.1.2.apk",
+    "update_url": "https://github.com/yacinbots/YACIN-HD/releases/download/Snap/Tasjil.APP_2.1.3.apk",
     "info_url": "https://yacinbots.github.io/Tasjil-APP-Download/",
-    "release_date": "2026-11-06"
+    "release_date": "2026-11-19"
   }
 }
