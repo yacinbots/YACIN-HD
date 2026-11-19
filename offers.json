@@ -13,30 +13,17 @@
       "image": null
     },
     {
-      "name": "Ooredoo Offer 1",
-      "internet": "15GB",
-      "calls": "15 دقيقة مع اوريدو",
-      "sms": "غير محدود",
-      "duration": "30 يوم",
-      "price": 1000,
-      "type": "شهري",
-      "packageCode": "OOREDOO1000",
+      "name": "اشتراك وفاء مميز",
+      "internet": "1GB",
+      "calls": "10 دقيقة مع اوريدو",
+      "duration": "24 ساعة",
+      "price": 30,
+      "type": "يومي",
+      "packageCode": "BTL_24H_SMART_30DZD_1Go",
       "mostRequested": true,
       "operator": "OOREDOO",
       "important": true,
-      "image": "https://raw.githubusercontent.com/yacinbots/YACIN-HD/refs/heads/main/file_000000008dd081f49a0986bb3dd2343c.png"
-    },
-    {
-      "name": "Ooredoo Offer 2",
-      "internet": "5GB",
-      "duration": "7 أيام",
-      "price": 500,
-      "type": "أسبوعي",
-      "packageCode": "OOREDOO500",
-      "mostRequested": false,
-      "operator": "OOREDOO",
-      "important": false,
-      "image": null
+      "image": "https://raw.githubusercontent.com/yacinbots/YACIN-HD/refs/heads/main/InShot_20261119_173834872.png"
     }
   ]
 }
